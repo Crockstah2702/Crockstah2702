@@ -319,11 +319,11 @@ class Vehicle:
             w = self.vehicle.getWheel(i)
             # Steering (front wheels only)
             if self.FRONT_WHEEL[i]:
-                w.setSteeringValue(math.degrees(self.steering_angle))
+                w.setSteering(math.degrees(self.steering_angle))
                 w.setEngineForce(0.0)
                 w.setBrake(brake_torque * 1.1)
             else:
-                w.setSteeringValue(0.0)
+                w.setSteering(0.0)
                 w.setEngineForce(engine_torque / 2.0)
                 w.setBrake(brake_torque + hbrake_torque)
                 if handbrake:

@@ -183,7 +183,7 @@ class HUD:
         rpm_ticks = [(v*1000, str(v)) for v in range(0, 9)]
         self.tacho = ArcGauge(
             aspect2d, pos=(1.35, -0.55), size=0.30,
-            lo=0, hi=8200, label="×1000 RPM",
+            lo=0, hi=8200, label="x1000 RPM",
             ticks=rpm_ticks,
             color=(1.0, 0.85, 0.7, 1.0),
             redline=7500,
@@ -236,7 +236,7 @@ class HUD:
 
         # ---- Controls help  (small, bottom center) -----------------------
         OnscreenText(
-            text="PS5: [R2] Gas  [L2] Bremse  [L-Stick] Lenken  [R1/L1] Gang  [△] Reset  [Touchpad] Kamera"
+            text="PS5: [R2] Gas  [L2] Bremse  [L-Stick] Lenken  [R1/L1] Gang  [[^]] Reset  [Touchpad] Kamera"
                  "    |    Tastatur: W/S Gas/Bremse  A/D Lenken  E/Q Gang  R Reset  C Kamera"
                  "    |    Maus: RMB = Kamera-Orbit  Scroll = Zoom",
             pos=(0, -0.95), scale=0.027,
@@ -267,9 +267,9 @@ class HUD:
             f"Gear : {gear_str}",
         ]
         if engine.damage > 0.5:
-            lines.append("⚠ ENGINE DAMAGE")
+            lines.append("(!) ENGINE DAMAGE")
         if engine.temperature > 105:
-            lines.append("⚠ OVERHEATING")
+            lines.append("(!) OVERHEATING")
         self._engine_text.setText("\n".join(lines))
 
         # Damage zones
