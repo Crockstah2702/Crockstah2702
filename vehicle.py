@@ -341,11 +341,14 @@ class Vehicle:
         self.soft.step(dt, pos, rot)
         self.soft.update_geom()
 
-        # Sync wheel visual positions with Bullet wheel state
+        # Sync wheel visual positions with Bullet wheel state.
+        # getWorldTransform() returns LMatrix4f; translation is in row 3.
         for i, wnp in enumerate(self._wheel_nps):
-            w = self.vehicle.getWheel(i)
-            wp = w.getWorldTransform().getPos()
-            wnp.setPos(self.chassis_np, wp - self.chassis_np.getPos(self.render))
+            w   = self.vehicle.getWheel(i)
+            mat = w.getWorldTransform()          # LMatrix4f
+            world_pos = Point3(mat.getRow3(3))   # extract translation
+            local_pos = self.chassis_np.getRelativePoint(self.render, world_pos)
+            wnp.setPos(local_pos)
 
     def _panda_rot_matrix(self) -> np.ndarray:
         """Extract 3×3 rotation matrix from chassis NodePath."""
