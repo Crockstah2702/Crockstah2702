@@ -7,7 +7,7 @@ Starten:
     pip install -r requirements.txt
     python main.py
 
-Steuerung (PS5 DualSense):
+Steuerung – PS5 DualSense:
     R2            Gaspedal
     L2            Bremse
     Linker Stick  Lenken
@@ -17,16 +17,21 @@ Steuerung (PS5 DualSense):
     Touchpad      Kamera wechseln
     Options       Pause
 
-Tastatur (Fallback):
+Steuerung – Tastatur:
     W / Pfeil-Hoch     Gas
     S / Pfeil-Runter   Bremse
     A/D / Pfeile       Lenken
     Leertaste          Handbremse
     E / Q              Hoch-/Runterschalten
     R                  Zurücksetzen
-    C                  Kamera
+    C                  Kamera wechseln
     P                  Pause
     F11                Vollbild
+
+Steuerung – Maus:
+    Rechte Maustaste + ziehen   Kamera-Orbit (alle Modi)
+    Scrollrad                   Zoom rein/raus
+    Im Cockpit-Modus (2):       Freies Umsehen mit RMB
 """
 
 import sys

@@ -236,10 +236,11 @@ class HUD:
 
         # ---- Controls help  (small, bottom center) -----------------------
         OnscreenText(
-            text="[R1/R2] Gas/Brake  [L-Stick] Steer  [R1/L1] Gear+/-  "
-                 "[△] Reset  [Touchpad] Cam",
-            pos=(0, -0.95), scale=0.030,
-            fg=(0.55, 0.55, 0.55, 1.0),
+            text="PS5: [R2] Gas  [L2] Bremse  [L-Stick] Lenken  [R1/L1] Gang  [△] Reset  [Touchpad] Kamera"
+                 "    |    Tastatur: W/S Gas/Bremse  A/D Lenken  E/Q Gang  R Reset  C Kamera"
+                 "    |    Maus: RMB = Kamera-Orbit  Scroll = Zoom",
+            pos=(0, -0.95), scale=0.027,
+            fg=(0.50, 0.50, 0.50, 1.0),
             align=TextNode.ACenter,
             parent=aspect2d, mayChange=False,
         )
