@@ -49,6 +49,7 @@ def main():
     print("=" * 60)
     print()
     print("Starte Spiel …")
+    print("(Beim ersten Start werden 3D-Assets generiert – kurz warten.)")
 
     app = DrivingGame()
     app.run()

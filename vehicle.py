@@ -25,64 +25,12 @@ from panda3d.bullet import (
     BulletGhostNode, BulletSphereShape,
 )
 
-from engine_sim import EngineSim
-from soft_body   import SoftBody
+from engine_sim       import EngineSim
+from soft_body        import SoftBody
+from generate_assets  import generate_all, assets_exist
 
 if TYPE_CHECKING:
     from direct.showbase.ShowBase import ShowBase
-
-
-# ---------------------------------------------------------------------------
-# Wheel geometry helper
-# ---------------------------------------------------------------------------
-
-def _make_wheel_np(render: NodePath, radius: float,
-                   width: float, color: tuple) -> NodePath:
-    from panda3d.core import (
-        GeomVertexData, GeomVertexWriter, GeomVertexFormat,
-        Geom, GeomTriangles, GeomNode,
-    )
-    SEG = 20
-    fmt   = GeomVertexFormat.getV3n3c4()
-    vdata = GeomVertexData("wheel", fmt, Geom.UHStatic)
-    v  = GeomVertexWriter(vdata, "vertex")
-    n  = GeomVertexWriter(vdata, "normal")
-    c  = GeomVertexWriter(vdata, "color")
-
-    def add(x, y, z, nx=0, ny=0, nz=1):
-        v.addData3(x, y, z)
-        n.addData3(nx, ny, nz)
-        c.addData4(*color)
-
-    # Cylinder: two circles + side
-    hw = width / 2
-    for side, sign in ((0, -1), (1, 1)):
-        cx, cy, cz = 0, 0, sign * hw
-        add(cx, cy, cz, 0, 0, sign)
-        for i in range(SEG):
-            a = 2*math.pi * i / SEG
-            add(radius*math.cos(a), radius*math.sin(a), sign*hw, 0, 0, sign)
-
-    tris = GeomTriangles(Geom.UHStatic)
-    # Disk faces
-    for side in range(2):
-        base = side * (SEG + 1)
-        for i in range(SEG):
-            i0 = base
-            i1 = base + 1 + i
-            i2 = base + 1 + (i+1) % SEG
-            if side == 0:
-                tris.addVertices(i0, i2, i1)
-            else:
-                tris.addVertices(i0, i1, i2)
-
-    geom = Geom(vdata)
-    geom.addPrimitive(tris)
-    gn   = GeomNode("wheel_geom")
-    gn.addGeom(geom)
-    np_  = render.attachNewNode(gn)
-    np_.setTwoSided(True)
-    return np_
 
 
 # ---------------------------------------------------------------------------
@@ -181,54 +129,59 @@ class Vehicle:
             w.setMaxSuspensionForce(60_000.0)
 
     # ------------------------------------------------------------------
-    # Visual geometry (procedural)
+    # Visual geometry – loaded from OBJ assets
     # ------------------------------------------------------------------
 
     def _setup_visuals(self):
-        # Main body via soft-body geometry
-        body_color = (0.10, 0.18, 0.62, 1.0)   # deep blue
-        self.soft.build_geom(self.chassis_np, color=body_color)
+        import os
+        from direct.showbase.Loader import Loader
 
-        # Roof structure (box)
-        self._add_box(self.chassis_np, Vec3(0.78, 1.3, 0.35),
-                      Point3(0, 0.1, 0.76),
-                      (0.08, 0.14, 0.52, 1.0), "roof")
+        # Generate OBJ assets if they don't exist yet
+        if not assets_exist():
+            print("[Vehicle] Generating 3D assets (first run) …")
+            generate_all()
 
-        # Windshield (dark tinted box)
-        self._add_box(self.chassis_np, Vec3(0.73, 0.05, 0.3),
-                      Point3(0, 1.3, 0.56),
-                      (0.1, 0.15, 0.25, 0.7), "windshield")
+        assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+        car_obj    = os.path.join(assets_dir, "car.obj")
+        wheel_obj  = os.path.join(assets_dir, "wheel.obj")
 
-        # Spoiler (rear)
-        self._add_box(self.chassis_np, Vec3(0.85, 0.06, 0.06),
-                      Point3(0, -2.05, 0.5),
-                      (0.06, 0.06, 0.06, 1.0), "spoiler")
+        loader = base.loader  # Panda3D global loader
 
-        # Headlights
-        for sx in (-1, 1):
-            self._add_box(self.chassis_np, Vec3(0.18, 0.04, 0.08),
-                          Point3(sx*0.6, 2.1, 0.15),
-                          (1.0, 0.97, 0.85, 1.0), f"headlight_{sx}")
+        # ---- Car body ----
+        self._body_np = loader.loadModel(car_obj)
+        if self._body_np:
+            self._body_np.reparentTo(self.chassis_np)
+            self._body_np.setPos(0, 0, 0)
+            # OBJ is Y-up; Panda3D loader converts → apply small Z offset
+            self._body_np.setPos(0, 0, 0.12)
+        else:
+            print("[Vehicle] WARNING: car.obj not found, using fallback box")
+            self.soft.build_geom(self.chassis_np)
 
-        # Tail lights
-        for sx in (-1, 1):
-            self._add_box(self.chassis_np, Vec3(0.22, 0.04, 0.1),
-                          Point3(sx*0.65, -2.1, 0.1),
-                          (0.9, 0.05, 0.05, 1.0), f"taillight_{sx}")
-
-        # Wheels
-        colors = [(0.12, 0.12, 0.12, 1.0)] * 4   # dark rubber
+        # ---- Wheels ----
         for i, wpos in enumerate(self.WHEEL_POS):
-            wheel_np = _make_wheel_np(self.chassis_np,
-                                      self.WHEEL_RADIUS,
-                                      self.WHEEL_WIDTH,
-                                      colors[i])
-            wheel_np.setPos(wpos)
-            self._wheel_nps.append(wheel_np)
+            # Pivot node – follows Bullet wheel world transform
+            pivot = self.chassis_np.attachNewNode(f"wheel_pivot_{i}")
+            pivot.setPos(wpos)
+
+            wheel_model = loader.loadModel(wheel_obj)
+            if wheel_model:
+                wheel_model.reparentTo(pivot)
+                # OBJ wheel cylinder is along Z; axle is along X in game → rotate
+                wheel_model.setHpr(0, 90, 0)
+                # Mirror left-side wheels
+                if i in (1, 3):
+                    wheel_model.setScale(-1, 1, 1)
+                    wheel_model.setTwoSided(True)
+            else:
+                print(f"[Vehicle] WARNING: wheel.obj not found for wheel {i}")
+
+            self._wheel_nps.append(pivot)
 
     @staticmethod
     def _add_box(parent: NodePath, half: Vec3, pos: Point3,
                  color: tuple, name: str) -> NodePath:
+        # Kept for soft-body fallback only
         from panda3d.core import (
             GeomVertexData, GeomVertexWriter, GeomVertexFormat,
             Geom, GeomTriangles, GeomNode,
@@ -240,12 +193,10 @@ class Vehicle:
         cw    = GeomVertexWriter(vdata, "color")
 
         hx, hy, hz = half.x, half.y, half.z
-        # 8 corners
         corners = [
             (-hx,-hy,-hz), ( hx,-hy,-hz), ( hx, hy,-hz), (-hx, hy,-hz),
             (-hx,-hy, hz), ( hx,-hy, hz), ( hx, hy, hz), (-hx, hy, hz),
         ]
-        # 6 faces × 4 verts
         faces = [
             (0,1,2,3,  0, 0,-1), (4,7,6,5,  0, 0, 1),
             (0,4,5,1,  0,-1, 0), (2,6,7,3,  0, 1, 0),
@@ -341,14 +292,17 @@ class Vehicle:
         self.soft.step(dt, pos, rot)
         self.soft.update_geom()
 
-        # Sync wheel visual positions with Bullet wheel state.
-        # getWorldTransform() returns LMatrix4f; translation is in row 3.
-        for i, wnp in enumerate(self._wheel_nps):
-            w   = self.vehicle.getWheel(i)
-            mat = w.getWorldTransform()          # LMatrix4f
-            world_pos = Point3(mat.getRow3(3))   # extract translation
-            local_pos = self.chassis_np.getRelativePoint(self.render, world_pos)
-            wnp.setPos(local_pos)
+        # Sync wheel pivot transforms with Bullet wheel world transforms.
+        # getWorldTransform() returns LMatrix4f (world space).
+        chassis_mat     = self.chassis_np.getMat(self.render)
+        chassis_mat_inv = Mat4(chassis_mat)
+        chassis_mat_inv.invertInPlace()
+
+        for i, pivot in enumerate(self._wheel_nps):
+            w        = self.vehicle.getWheel(i)
+            world_mat = Mat4(w.getWorldTransform())   # copy to Mat4
+            local_mat = world_mat * chassis_mat_inv   # to chassis-local
+            pivot.setMat(local_mat)
 
     def _panda_rot_matrix(self) -> np.ndarray:
         """Extract 3×3 rotation matrix from chassis NodePath."""
