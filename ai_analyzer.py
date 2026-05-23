@@ -3,14 +3,29 @@ Dynamisches TP/SL via Claude KI.
 Analysiert Token-Eigenschaften und schlägt optimale TP/SL-Prozentsätze vor.
 """
 
+import asyncio
 import json
 import logging
-import anthropic
+from config import cfg
 from price_fetcher import get_token_symbol
 
 log = logging.getLogger("ai")
 
-client = anthropic.Anthropic()
+_client = None
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        if not cfg.ANTHROPIC_API_KEY:
+            return None
+        try:
+            import anthropic
+        except ModuleNotFoundError:
+            log.warning("[AI] 'anthropic' nicht installiert — TP/SL nutzt Standardwerte")
+            return None
+        _client = anthropic.Anthropic(api_key=cfg.ANTHROPIC_API_KEY)
+    return _client
 
 
 async def get_dynamic_tp_sl(
@@ -51,8 +66,14 @@ Antworte NUR mit diesem JSON-Format (kein anderer Text):
   "reasoning": "<1-2 Sätze Begründung auf Deutsch>"
 }}"""
 
+    client = _get_client()
+    if client is None:
+        return {"tp_pct": 50.0, "sl_pct": 20.0,
+                "reasoning": "Standardwerte (kein ANTHROPIC_API_KEY gesetzt)"}
+
     try:
-        message = client.messages.create(
+        message = await asyncio.to_thread(
+            client.messages.create,
             model="claude-haiku-4-5-20251001",
             max_tokens=256,
             messages=[{"role": "user", "content": prompt}],

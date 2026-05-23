@@ -1,4 +1,10 @@
-# Copy-Trading-Bot Dependencies
+# Copy-Trading Web-Terminal Dependencies
+
+# Web-Terminal
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+
+# Allgemein
 aiohttp>=3.9.0
 websockets>=12.0
 python-dotenv>=1.0.0
@@ -14,5 +20,5 @@ eth-account>=0.11.0
 # KI (dynamisches TP/SL)
 anthropic>=0.40.0
 
-# Telegram (iPhone)
+# Telegram (optional, für Handy-Benachrichtigungen)
 python-telegram-bot>=21.0

@@ -1,0 +1,11 @@
+# Secrets — NIEMALS committen!
+.env
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

@@ -1,11 +1,11 @@
 """
 Copy-Trading-Bot Orchestrator.
-Startet Monitor, Executor, Position-Manager und Telegram für alle Chains.
+Wird vom Web-Terminal gesteuert: start() erzeugt alle Async-Tasks,
+stop() bricht sie ab. Live-Daten landen in shared_state.state.
 """
 
 import asyncio
 import logging
-import time
 import uuid
 
 from config import cfg
@@ -13,155 +13,175 @@ from filters import TradeInfo, should_copy, apply_max_trade_filter
 from position_manager import Position, PositionManager
 from price_fetcher import get_token_price, get_token_symbol
 from ai_analyzer import get_dynamic_tp_sl
-from telegram_interface import TelegramInterface
+from scanner import Scanner
+from shared_state import state
 
 log = logging.getLogger("bot")
 
 SOL_LAMPORTS = 1_000_000_000
 ETH_WEI = 10**18
+SOL_MINT = "So11111111111111111111111111111111111111112"
+ETH_NATIVE = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
 
 
 class CopyTradingBot:
     def __init__(self):
-        self.tg = TelegramInterface()
         self.pm = PositionManager(on_close=self._on_position_close)
-        self.tg.pm = self.pm
-
+        self.scanner = Scanner(on_update=self._on_scanner_update)
+        self.tg = None
         self.sol_executor = None
         self.eth_executor = None
+        self._tasks: list[asyncio.Task] = []
+        self._running = False
+
+    # ─── Steuerung (vom Web) ───────────────────────────────────
+
+    async def start(self):
+        if self._running:
+            return
+        cfg.reload()
+        self._running = True
+
+        state.bot_active = True
+        state.paused = False
+        state.dry_run = cfg.DRY_RUN
+        state.enable_sol = cfg.ENABLE_SOL
+        state.enable_eth = cfg.ENABLE_ETH
+        state.enable_scanner = cfg.ENABLE_SCANNER
+
+        state.add_log("INFO", "Bot wird gestartet…")
+        if cfg.DRY_RUN:
+            state.add_log("WARN", "DRY_RUN aktiv — es wird NICHT echt gehandelt.")
+
+        await self._start_telegram()
+
+        self._tasks.append(asyncio.create_task(self.pm.run_monitor(), name="positions"))
+
+        if cfg.ENABLE_SCANNER:
+            self._tasks.append(asyncio.create_task(self.scanner.run(), name="scanner"))
+            state.add_log("INFO", "Call-Bot / Scanner aktiviert.")
+
+        if cfg.ENABLE_SOL:
+            try:
+                cfg.validate_sol()
+                from executor_solana import SolanaExecutor
+                from monitor_solana import SolanaMonitor
+                self.sol_executor = SolanaExecutor()
+                mon = SolanaMonitor(on_trade=self._on_sol_trade)
+                self._tasks.append(asyncio.create_task(mon.run(), name="sol_monitor"))
+                state.add_log("INFO", f"Solana-Copy-Trading aktiv → {cfg.TARGET_WALLET_SOL[:8]}…")
+            except Exception as e:
+                state.add_log("ERROR", f"Solana-Start fehlgeschlagen: {e}")
+
+        if cfg.ENABLE_ETH:
+            try:
+                cfg.validate_eth()
+                from executor_eth import EthExecutor
+                from monitor_eth import EthMonitor
+                self.eth_executor = EthExecutor()
+                mon = EthMonitor(on_trade=self._on_eth_trade)
+                self._tasks.append(asyncio.create_task(mon.run(), name="eth_monitor"))
+                state.add_log("INFO", f"ETH-Copy-Trading aktiv → {cfg.TARGET_WALLET_ETH[:10]}…")
+            except Exception as e:
+                state.add_log("ERROR", f"ETH-Start fehlgeschlagen: {e}")
+
+        state.add_log("INFO", "Bot läuft ✓")
+
+    async def stop(self):
+        self._running = False
+        state.bot_active = False
+        for t in self._tasks:
+            t.cancel()
+        self._tasks.clear()
+        if self.sol_executor:
+            try:
+                await self.sol_executor.close()
+            except Exception:
+                pass
+        if self.tg:
+            try:
+                await self.tg.stop()
+            except Exception:
+                pass
+        state.add_log("INFO", "Bot gestoppt.")
+
+    def pause(self):
+        state.paused = True
+        state.add_log("WARN", "Trading pausiert.")
+
+    def resume(self):
+        state.paused = False
+        state.add_log("INFO", "Trading fortgesetzt.")
+
+    async def _start_telegram(self):
+        if not cfg.TELEGRAM_BOT_TOKEN:
+            return
+        try:
+            from telegram_interface import TelegramInterface
+            self.tg = TelegramInterface(position_manager=self.pm)
+            await self.tg.start()
+        except Exception as e:
+            log.warning(f"Telegram nicht gestartet: {e}")
+            self.tg = None
 
     # ─── Trade-Handler ─────────────────────────────────────────
 
     async def _on_sol_trade(self, trade: TradeInfo):
-        if self.tg.is_paused():
-            log.info("[BOT] SOL-Trade ignoriert — Bot pausiert.")
+        if state.paused:
             return
-        if not should_copy(trade):
-            return
-        await self._process_trade(trade)
+        if should_copy(trade):
+            await self._process_trade(trade)
 
     async def _on_eth_trade(self, trade: TradeInfo):
-        if self.tg.is_paused():
-            log.info("[BOT] ETH-Trade ignoriert — Bot pausiert.")
+        if state.paused:
             return
-        if not should_copy(trade):
-            return
-        await self._process_trade(trade)
+        if should_copy(trade):
+            await self._process_trade(trade)
 
     async def _process_trade(self, trade: TradeInfo):
-        # Kaufpreis ermitteln
         entry_price = await get_token_price(trade.chain, trade.output_mint)
         symbol = await get_token_symbol(trade.chain, trade.output_mint)
 
-        # Betrag in USD schätzen
         if trade.chain == "SOL":
-            sol_price = await get_token_price("SOL", "So11111111111111111111111111111111111111112") or 150.0
-            in_usd = (trade.in_amount / SOL_LAMPORTS) * sol_price
+            sol_usd = await get_token_price("SOL", SOL_MINT) or 150.0
+            in_usd = (trade.in_amount / SOL_LAMPORTS) * sol_usd
         else:
-            eth_price = await get_token_price("ETH", "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE") or 3000.0
-            in_usd = (trade.in_amount / ETH_WEI) * eth_price
+            eth_usd = await get_token_price("ETH", ETH_NATIVE) or 3000.0
+            in_usd = (trade.in_amount / ETH_WEI) * eth_usd
 
-        # KI: dynamisches TP/SL
         tp_sl = await get_dynamic_tp_sl(
-            chain=trade.chain,
-            input_mint=trade.input_mint,
-            output_mint=trade.output_mint,
-            in_amount_usd=in_usd,
-            current_price=entry_price,
-            dex=trade.dex,
+            chain=trade.chain, input_mint=trade.input_mint,
+            output_mint=trade.output_mint, in_amount_usd=in_usd,
+            current_price=entry_price, dex=trade.dex,
         )
-        tp_pct = tp_sl["tp_pct"]
-        sl_pct = tp_sl["sl_pct"]
-        reasoning = tp_sl["reasoning"]
+        tp_pct, sl_pct, reasoning = tp_sl["tp_pct"], tp_sl["sl_pct"], tp_sl["reasoning"]
 
-        # Trade ausführen
+        state.total_trades += 1
+        state.add_log("TRADE", f"{symbol} ({trade.chain}) ${in_usd:.0f} | TP +{tp_pct:.0f}% SL -{sl_pct:.0f}%")
+
         if trade.chain == "SOL" and self.sol_executor:
             await self.sol_executor.execute(trade)
         elif trade.chain == "ETH" and self.eth_executor:
             await self.eth_executor.execute(trade)
 
-        # Telegram-Notification
-        await self.tg.notify_new_trade(
-            symbol=symbol,
-            chain=trade.chain,
-            amount_usd=in_usd,
-            tp_pct=tp_pct,
-            sl_pct=sl_pct,
-            reasoning=reasoning,
-            tx_sig=trade.tx_sig,
-        )
+        if self.tg:
+            await self.tg.notify_new_trade(symbol, trade.chain, in_usd, tp_pct, sl_pct, reasoning, trade.tx_sig)
 
-        # Position tracken (nur wenn Preis bekannt)
         if entry_price:
-            capped = apply_max_trade_filter(trade)
-            if trade.chain == "SOL":
-                amount_tokens = trade.out_amount / 10**6  # meiste SPL-Token haben 6 Dezimalstellen
-            else:
-                amount_tokens = trade.out_amount / ETH_WEI
-
+            decimals = 10**6 if trade.chain == "SOL" else ETH_WEI
             pos = Position(
-                id=str(uuid.uuid4())[:8],
-                chain=trade.chain,
-                input_mint=trade.input_mint,
-                output_mint=trade.output_mint,
-                symbol=symbol,
-                entry_price=entry_price,
-                amount_tokens=amount_tokens,
-                amount_usd=in_usd,
-                tp_pct=tp_pct,
-                sl_pct=sl_pct,
-                reasoning=reasoning,
+                id=str(uuid.uuid4())[:8], chain=trade.chain,
+                input_mint=trade.input_mint, output_mint=trade.output_mint,
+                symbol=symbol, entry_price=entry_price,
+                amount_tokens=trade.out_amount / decimals, amount_usd=in_usd,
+                tp_pct=tp_pct, sl_pct=sl_pct, reasoning=reasoning,
             )
             await self.pm.add(pos)
 
-    # ─── Position Close ────────────────────────────────────────
-
     async def _on_position_close(self, pos: Position, reason: str, price: float):
-        pnl_pct = pos.pnl_pct(price)
-        pnl_usd = pos.pnl_usd(price)
+        if self.tg:
+            await self.tg.notify_close(pos.symbol, pos.chain, reason,
+                                       pos.pnl_pct(price), pos.pnl_usd(price))
 
-        # Hier könnte man automatisch verkaufen — aktuell Notification
-        await self.tg.notify_close(
-            symbol=pos.symbol,
-            chain=pos.chain,
-            reason=reason,
-            pnl_pct=pnl_pct,
-            pnl_usd=pnl_usd,
-        )
-        log.info(f"[BOT] Position {pos.symbol} geschlossen via {reason} | P&L: {pnl_pct:+.1f}%")
-
-    # ─── Start ────────────────────────────────────────────────
-
-    async def run(self):
-        await self.tg.start()
-
-        tasks = [
-            asyncio.create_task(self.pm.run_monitor(), name="position_monitor"),
-        ]
-
-        if cfg.ENABLE_SOL:
-            cfg.validate_sol()
-            from executor_solana import SolanaExecutor
-            from monitor_solana import SolanaMonitor
-            self.sol_executor = SolanaExecutor()
-            sol_monitor = SolanaMonitor(on_trade=self._on_sol_trade)
-            tasks.append(asyncio.create_task(sol_monitor.run(), name="sol_monitor"))
-            log.info("[BOT] Solana aktiviert")
-
-        if cfg.ENABLE_ETH:
-            cfg.validate_eth()
-            from executor_eth import EthExecutor
-            from monitor_eth import EthMonitor
-            self.eth_executor = EthExecutor()
-            eth_monitor = EthMonitor(on_trade=self._on_eth_trade)
-            tasks.append(asyncio.create_task(eth_monitor.run(), name="eth_monitor"))
-            log.info("[BOT] Ethereum aktiviert")
-
-        if cfg.DRY_RUN:
-            log.warning("[BOT] *** DRY_RUN=true *** Kein echter Handel — nur Simulation!")
-
-        await asyncio.gather(*tasks)
-
-        if self.sol_executor:
-            await self.sol_executor.close()
-        await self.tg.stop()
+    async def _on_scanner_update(self, results: dict):
+        state.update_scanner(results)

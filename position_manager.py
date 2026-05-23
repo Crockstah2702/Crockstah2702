@@ -91,6 +91,8 @@ class PositionManager:
                 pnl = pos.pnl_pct(current_price)
                 log.debug(f"[POS] {pos.symbol}: ${current_price:.6f} | P&L: {pnl:+.1f}%")
 
+                self._push_state(pos, current_price)
+
                 if current_price >= pos.tp_price:
                     await self._close(pos, "TP", current_price)
                 elif current_price <= pos.sl_price:
@@ -98,6 +100,23 @@ class PositionManager:
 
             except Exception as e:
                 log.error(f"[POS] Fehler bei {pos.symbol}: {e}")
+
+    def _push_state(self, pos: Position, current_price: float):
+        from shared_state import state, LivePosition
+        state.upsert_position(LivePosition(
+            id=pos.id,
+            symbol=pos.symbol,
+            chain=pos.chain,
+            entry_price=pos.entry_price,
+            current_price=current_price,
+            amount_usd=pos.amount_usd,
+            tp_pct=pos.tp_pct,
+            sl_pct=pos.sl_pct,
+            pnl_pct=round(pos.pnl_pct(current_price), 2),
+            pnl_usd=round(pos.pnl_usd(current_price), 2),
+            reasoning=pos.reasoning,
+        ))
+        state.add_price_point(pos.symbol, current_price)
 
     async def _close(self, pos: Position, reason: str, price: float):
         async with self._lock:
@@ -112,4 +131,10 @@ class PositionManager:
             f"[POS] {emoji} {reason} ausgelöst für {pos.symbol} | "
             f"P&L: {pnl:+.1f}% (${pnl_usd:+.2f})"
         )
+
+        from shared_state import state
+        state.record_close(reason, pnl_usd)
+        state.remove_position(pos.id)
+        state.add_log(reason, f"{pos.symbol} {reason} ausgelöst: {pnl:+.1f}% (${pnl_usd:+.2f})")
+
         await self.on_close(pos, reason, price)
