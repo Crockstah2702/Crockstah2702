@@ -1,3 +1,12 @@
-panda3d>=1.10.14
-pygame>=2.5.0
-numpy>=1.24.0
+# Copy-Trading-Bot Dependencies
+aiohttp>=3.9.0
+websockets>=12.0
+python-dotenv>=1.0.0
+
+# Solana
+solana>=0.34.0
+solders>=0.21.0
+
+# Ethereum
+web3>=6.15.0
+eth-account>=0.11.0
