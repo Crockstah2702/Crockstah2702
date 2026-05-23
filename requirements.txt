@@ -10,3 +10,9 @@ solders>=0.21.0
 # Ethereum
 web3>=6.15.0
 eth-account>=0.11.0
+
+# KI (dynamisches TP/SL)
+anthropic>=0.40.0
+
+# Telegram (iPhone)
+python-telegram-bot>=21.0

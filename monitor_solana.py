@@ -1,6 +1,7 @@
 """
 Solana Wallet Monitor.
-Überwacht eine Wallet via WebSocket (logsSubscribe) und erkennt Jupiter-Swaps.
+Dual-Mode: WebSocket (Echtzeit) + direktes On-Chain-Polling (Backup).
+Erkennt Jupiter- und Raydium-Swaps.
 """
 
 import asyncio
@@ -14,29 +15,39 @@ from filters import TradeInfo
 
 log = logging.getLogger("monitor_sol")
 
-# Bekannte Programm-IDs
 JUPITER_V6 = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
 RAYDIUM_V4 = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
 SOL_MINT = "So11111111111111111111111111111111111111112"
 
+POLL_INTERVAL = 10  # Sekunden für On-Chain-Backup-Polling
+
 
 class SolanaMonitor:
     def __init__(self, on_trade):
-        self.on_trade = on_trade  # async callback(TradeInfo)
+        self.on_trade = on_trade
         self._seen: set[str] = set()
 
     async def run(self):
-        log.info(f"[SOL] Starte Monitor für Wallet: {cfg.TARGET_WALLET_SOL}")
+        log.info(f"[SOL] Überwache Wallet direkt auf der Blockchain: {cfg.TARGET_WALLET_SOL}")
+        # Starte WebSocket + Polling-Backup parallel
+        await asyncio.gather(
+            self._run_websocket(),
+            self._run_onchain_polling(),
+        )
+
+    # ─── WebSocket (Echtzeit) ──────────────────────────────────
+
+    async def _run_websocket(self):
         while True:
             try:
-                await self._connect()
+                await self._connect_ws()
             except Exception as e:
                 log.error(f"[SOL] WebSocket-Fehler: {e} — Neuverbindung in 5s")
                 await asyncio.sleep(5)
 
-    async def _connect(self):
+    async def _connect_ws(self):
         async with websockets.connect(cfg.SOLANA_WS_URL) as ws:
-            sub_msg = {
+            sub = {
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "logsSubscribe",
@@ -45,39 +56,106 @@ class SolanaMonitor:
                     {"commitment": "confirmed"},
                 ],
             }
-            await ws.send(json.dumps(sub_msg))
-            log.info("[SOL] WebSocket verbunden, warte auf Transaktionen...")
+            await ws.send(json.dumps(sub))
+            log.info("[SOL] WebSocket verbunden ✓")
 
             async for raw in ws:
                 try:
                     msg = json.loads(raw)
-                    await self._handle_message(msg)
+                    await self._handle_ws_message(msg)
                 except Exception as e:
                     log.debug(f"[SOL] Parse-Fehler: {e}")
 
-    async def _handle_message(self, msg: dict):
-        method = msg.get("method")
-        if method != "logsNotification":
+    async def _handle_ws_message(self, msg: dict):
+        if msg.get("method") != "logsNotification":
             return
-
         result = msg.get("params", {}).get("result", {})
         value = result.get("value", {})
         sig = value.get("signature", "")
-        err = value.get("err")
-
-        if err:
+        if value.get("err") or not sig:
             return
+
+        logs = value.get("logs", [])
+        dex = self._detect_dex(logs)
+        if dex:
+            await self._process_signature(sig, dex)
+
+    # ─── On-Chain Polling (direkte Blockchain-Prüfung) ──────────
+
+    async def _run_onchain_polling(self):
+        """
+        Pollt getSignaturesForAddress direkt an der Blockchain —
+        damit werden auch Transaktionen gefunden die der WebSocket verpasst.
+        """
+        last_sig: str | None = None
+        await asyncio.sleep(5)  # WebSocket zuerst starten lassen
+
+        while True:
+            try:
+                sigs = await self._fetch_recent_signatures(last_sig)
+                if sigs:
+                    last_sig = sigs[0]  # neueste Signatur merken
+                    for sig in reversed(sigs):  # älteste zuerst verarbeiten
+                        await self._process_signature_from_chain(sig)
+            except Exception as e:
+                log.debug(f"[SOL] Polling-Fehler: {e}")
+            await asyncio.sleep(POLL_INTERVAL)
+
+    async def _fetch_recent_signatures(self, before: str | None) -> list[str]:
+        """Holt die neuesten Transaktionssignaturen der Ziel-Wallet direkt von der Blockchain."""
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getSignaturesForAddress",
+            "params": [
+                cfg.TARGET_WALLET_SOL,
+                {
+                    "limit": 20,
+                    "commitment": "confirmed",
+                },
+            ],
+        }
+        if before:
+            payload["params"][1]["until"] = before
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(cfg.SOLANA_RPC_URL, json=payload) as resp:
+                if resp.status != 200:
+                    return []
+                data = await resp.json()
+
+        results = data.get("result", [])
+        # Nur erfolgreiche Transaktionen
+        return [r["signature"] for r in results if not r.get("err")]
+
+    async def _process_signature_from_chain(self, sig: str):
+        """Prüft direkt on-chain ob eine Transaktion ein Swap war."""
+        if sig in self._seen:
+            return
+        tx = await self._fetch_tx(sig)
+        if not tx:
+            return
+        # Prüfe ob es ein DEX-Swap ist
+        logs = tx.get("meta", {}).get("logMessages", [])
+        dex = self._detect_dex(logs)
+        if dex:
+            await self._process_signature(sig, dex, tx=tx)
+
+    # ─── Gemeinsame Verarbeitung ───────────────────────────────
+
+    async def _process_signature(self, sig: str, dex: str, tx: dict | None = None):
         if sig in self._seen:
             return
         self._seen.add(sig)
 
-        logs = value.get("logs", [])
-        dex = self._detect_dex(logs)
-        if not dex:
+        log.info(f"[SOL] {dex}-Swap on-chain bestätigt: {sig[:16]}…")
+
+        if tx is None:
+            tx = await self._fetch_tx(sig)
+        if not tx:
             return
 
-        log.info(f"[SOL] {dex}-Transaktion erkannt: {sig[:16]}…")
-        trade = await self._fetch_trade_details(sig, dex)
+        trade = self._parse_swap(tx, sig, dex)
         if trade:
             await self.on_trade(trade)
 
@@ -89,7 +167,7 @@ class SolanaMonitor:
             return "Raydium"
         return None
 
-    async def _fetch_trade_details(self, sig: str, dex: str) -> TradeInfo | None:
+    async def _fetch_tx(self, sig: str) -> dict | None:
         payload = {
             "jsonrpc": "2.0",
             "id": 1,
@@ -104,19 +182,12 @@ class SolanaMonitor:
                 if resp.status != 200:
                     return None
                 data = await resp.json()
-
-        tx = data.get("result")
-        if not tx:
-            return None
-
-        return self._parse_swap(tx, sig, dex)
+        return data.get("result")
 
     def _parse_swap(self, tx: dict, sig: str, dex: str) -> TradeInfo | None:
         meta = tx.get("meta", {})
         pre_balances = meta.get("preTokenBalances", [])
         post_balances = meta.get("postTokenBalances", [])
-
-        # Finde welche Token-Accounts zur Ziel-Wallet gehören
         my_accounts = self._get_my_token_accounts(tx)
 
         input_mint = None
@@ -127,11 +198,9 @@ class SolanaMonitor:
         pre_map = {b["accountIndex"]: b for b in pre_balances}
         post_map = {b["accountIndex"]: b for b in post_balances}
 
-        all_indices = set(pre_map.keys()) | set(post_map.keys())
-        for idx in all_indices:
+        for idx in set(pre_map.keys()) | set(post_map.keys()):
             if idx not in my_accounts:
                 continue
-
             pre_ui = int(pre_map.get(idx, {}).get("uiTokenAmount", {}).get("amount", "0") or "0")
             post_ui = int(post_map.get(idx, {}).get("uiTokenAmount", {}).get("amount", "0") or "0")
             diff = post_ui - pre_ui
@@ -144,7 +213,7 @@ class SolanaMonitor:
                 output_mint = mint
                 out_amount = diff
 
-        # SOL-Balance-Änderung als Fallback für Input/Output
+        # SOL-Balance als Fallback
         if not input_mint:
             pre_sol = meta.get("preBalances", [])
             post_sol = meta.get("postBalances", [])
@@ -161,7 +230,6 @@ class SolanaMonitor:
                         out_amount = sol_diff
 
         if not input_mint or not output_mint or in_amount == 0:
-            log.debug(f"[SOL] Swap-Details unvollständig für {sig[:16]}…, wird übersprungen")
             return None
 
         return TradeInfo(
@@ -182,7 +250,6 @@ class SolanaMonitor:
             key = acc if isinstance(acc, str) else acc.get("pubkey", "")
             if key == cfg.TARGET_WALLET_SOL:
                 my_indices.add(i)
-        # Token-Accounts die der Wallet gehören via preTokenBalances owner-Feld
         meta = tx.get("meta", {})
         for b in meta.get("preTokenBalances", []) + meta.get("postTokenBalances", []):
             if b.get("owner") == cfg.TARGET_WALLET_SOL:

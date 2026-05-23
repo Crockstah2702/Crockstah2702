@@ -37,6 +37,11 @@ class Config:
     MAX_TRADE_ETH: float = _float("MAX_TRADE_ETH", 0.05)
     SLIPPAGE_BPS: int = int(_float("SLIPPAGE_BPS", 50))
 
+    # KI & Telegram
+    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "")
+
     # Flags
     ENABLE_SOL: bool = _bool("ENABLE_SOL", True)
     ENABLE_ETH: bool = _bool("ENABLE_ETH", True)
