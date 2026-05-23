@@ -48,6 +48,27 @@ async def save_config(data: dict):
         return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 
+@app.post("/api/derive")
+async def derive_address(data: dict):
+    """Leitet aus einer Recovery Phrase die Wallet-Adresse(n) ab — nur zur Prüfung."""
+    chain = data.get("chain", "SOL")
+    mnemonic = (data.get("mnemonic") or "").strip()
+    if mnemonic == "********" or not mnemonic:
+        return JSONResponse({"ok": False, "error": "Bitte Recovery Phrase eingeben."}, status_code=400)
+    words = len(mnemonic.split())
+    if words not in (12, 24):
+        return JSONResponse({"ok": False, "error": f"Phrase hat {words} Wörter — erwartet 12 oder 24."}, status_code=400)
+    try:
+        import key_utils
+        if chain == "SOL":
+            return {"ok": True, "addresses": key_utils.list_solana_addresses(mnemonic)}
+        else:
+            addr = key_utils.derive_eth_address(mnemonic)
+            return {"ok": True, "addresses": [{"path": "m/44'/60'/0'/0/0", "label": "MetaMask", "address": addr}]}
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+
+
 @app.post("/api/start")
 async def start_bot():
     if not cfg.is_configured():
@@ -188,6 +209,15 @@ INDEX_HTML = r"""<!DOCTYPE html>
     width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);
     border-radius:6px;color:var(--txt);font-family:inherit;font-size:12px}
   .field input:focus{outline:none;border-color:var(--accent2)}
+  select{width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);
+    border-radius:6px;color:var(--txt);font-family:inherit;font-size:12px}
+  .orsep{text-align:center;color:var(--muted);font-size:11px;margin:8px 0}
+  .derive-result{margin-top:8px;font-size:11px}
+  .derive-result .dhint{color:var(--yellow);margin-bottom:5px}
+  .derive-result .daddr{background:var(--bg);border:1px solid var(--border);border-radius:6px;
+    padding:7px 9px;margin-bottom:5px}
+  .derive-result code{color:var(--accent2);word-break:break-all;font-size:11px}
+  .derive-result .t{color:var(--muted)}
   .check{display:flex;align-items:center;gap:8px;margin-bottom:8px}
   .check input{width:16px;height:16px;accent-color:var(--accent)}
   .save-row{grid-column:1/-1;display:flex;gap:10px;align-items:center}
@@ -266,18 +296,32 @@ INDEX_HTML = r"""<!DOCTYPE html>
       <fieldset>
         <legend>Solana</legend>
         <div class="field"><label>RPC URL (Helius)</label><input type="text" name="SOLANA_RPC_URL"></div>
-        <div class="field"><label>WebSocket URL</label><input type="text" name="SOLANA_WS_URL"></div>
-        <div class="field"><label>Private Key (Base58)</label><input type="password" name="SOLANA_PRIVATE_KEY"></div>
-        <div class="field"><label>Ziel-Wallet (z.B. Cented)</label><input type="text" name="TARGET_WALLET_SOL"></div>
+        <div class="field"><label>WebSocket URL (wss://…)</label><input type="text" name="SOLANA_WS_URL"></div>
+        <div class="field"><label>Private Key (Base58) — leer lassen wenn Recovery Phrase</label><input type="password" name="SOLANA_PRIVATE_KEY"></div>
+        <div class="orsep">— ODER —</div>
+        <div class="field"><label>Recovery Phrase (12 / 24 Wörter)</label><input type="password" name="SOLANA_MNEMONIC"></div>
+        <div class="field"><label>Ableitungspfad</label>
+          <select name="SOLANA_DERIVATION_PATH">
+            <option value="m/44'/501'/0'/0'">Phantom (Standard)</option>
+            <option value="m/44'/501'/0'">Solflare / Account-Pfad</option>
+          </select>
+        </div>
+        <button class="btn" type="button" onclick="deriveAddr('SOL')">🔍 Adresse aus Phrase prüfen</button>
+        <div class="derive-result" id="derive-SOL"></div>
+        <div class="field" style="margin-top:10px"><label>Ziel-Wallet (z.B. Cented)</label><input type="text" name="TARGET_WALLET_SOL"></div>
         <div class="check"><input type="checkbox" name="ENABLE_SOL"><label>Solana Copy-Trading aktiv</label></div>
       </fieldset>
 
       <fieldset>
         <legend>Ethereum</legend>
         <div class="field"><label>RPC URL (Alchemy)</label><input type="text" name="ETH_RPC_URL"></div>
-        <div class="field"><label>WebSocket URL</label><input type="text" name="ETH_WS_URL"></div>
-        <div class="field"><label>Private Key (0x…)</label><input type="password" name="ETH_PRIVATE_KEY"></div>
-        <div class="field"><label>Ziel-Wallet</label><input type="text" name="TARGET_WALLET_ETH"></div>
+        <div class="field"><label>WebSocket URL (wss://…)</label><input type="text" name="ETH_WS_URL"></div>
+        <div class="field"><label>Private Key (0x…) — leer lassen wenn Recovery Phrase</label><input type="password" name="ETH_PRIVATE_KEY"></div>
+        <div class="orsep">— ODER —</div>
+        <div class="field"><label>Recovery Phrase (12 / 24 Wörter)</label><input type="password" name="ETH_MNEMONIC"></div>
+        <button class="btn" type="button" onclick="deriveAddr('ETH')">🔍 Adresse aus Phrase prüfen</button>
+        <div class="derive-result" id="derive-ETH"></div>
+        <div class="field" style="margin-top:10px"><label>Ziel-Wallet</label><input type="text" name="TARGET_WALLET_ETH"></div>
         <div class="check"><input type="checkbox" name="ENABLE_ETH"><label>Ethereum Copy-Trading aktiv</label></div>
       </fieldset>
 
@@ -318,7 +362,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
 <div class="toast" id="toast"></div>
 
 <script>
-const SECRETS=["SOLANA_PRIVATE_KEY","ETH_PRIVATE_KEY","ANTHROPIC_API_KEY","TELEGRAM_BOT_TOKEN","MORALIS_API_KEY","BIRDEYE_API_KEY"];
+const SECRETS=["SOLANA_PRIVATE_KEY","SOLANA_MNEMONIC","ETH_PRIVATE_KEY","ETH_MNEMONIC","ANTHROPIC_API_KEY","TELEGRAM_BOT_TOKEN","MORALIS_API_KEY","BIRDEYE_API_KEY"];
 const BOOLS=["ENABLE_SOL","ENABLE_ETH","ENABLE_SCANNER","DRY_RUN"];
 let paused=false;
 
@@ -340,8 +384,21 @@ async function loadCfg(){
   for(const k in c){
     const el=document.querySelector('[name="'+k+'"]'); if(!el)continue;
     if(BOOLS.includes(k)) el.checked=(c[k]===true||c[k]==='true');
-    else el.value=c[k];
+    else if(c[k]!=='' && c[k]!=null) el.value=c[k];
   }
+}
+
+async function deriveAddr(chain){
+  const name = chain==='SOL' ? 'SOLANA_MNEMONIC' : 'ETH_MNEMONIC';
+  const mnemonic = document.querySelector('[name="'+name+'"]').value;
+  const box = document.getElementById('derive-'+chain);
+  if(!mnemonic || mnemonic==='********'){ box.innerHTML='<span class="neg">Bitte Recovery Phrase eingeben.</span>'; return; }
+  box.innerHTML='Prüfe…';
+  const r = await fetch('/api/derive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chain,mnemonic})});
+  const res = await r.json();
+  if(!res.ok){ box.innerHTML='<span class="neg">'+res.error+'</span>'; return; }
+  box.innerHTML='<div class="dhint">⚠ Vergleiche mit deiner echten Wallet-Adresse! Eine davon muss exakt passen:</div>'+
+    res.addresses.map(a=>'<div class="daddr"><b>'+a.label+'</b> <span class="t">'+a.path+'</span><br><code>'+a.address+'</code></div>').join('');
 }
 
 async function saveCfg(){

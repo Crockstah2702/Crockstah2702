@@ -26,7 +26,8 @@ SOL_MINT = "So11111111111111111111111111111111111111112"
 
 class SolanaExecutor:
     def __init__(self):
-        self.keypair = Keypair.from_base58_string(cfg.SOLANA_PRIVATE_KEY)
+        from key_utils import get_solana_keypair
+        self.keypair = get_solana_keypair()
         self.client = AsyncClient(cfg.SOLANA_RPC_URL)
         log.info(f"Solana-Wallet: {self.keypair.pubkey()}")
 

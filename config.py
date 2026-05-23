@@ -10,11 +10,14 @@ FIELDS: dict[str, str] = {
     "SOLANA_RPC_URL": "",
     "SOLANA_WS_URL": "",
     "SOLANA_PRIVATE_KEY": "",
+    "SOLANA_MNEMONIC": "",
+    "SOLANA_DERIVATION_PATH": "",
     "TARGET_WALLET_SOL": "",
     # Ethereum
     "ETH_RPC_URL": "",
     "ETH_WS_URL": "",
     "ETH_PRIVATE_KEY": "",
+    "ETH_MNEMONIC": "",
     "TARGET_WALLET_ETH": "",
     # KI & Telegram
     "ANTHROPIC_API_KEY": "",
@@ -38,8 +41,8 @@ FIELDS: dict[str, str] = {
 }
 
 SECRET_FIELDS = {
-    "SOLANA_PRIVATE_KEY", "ETH_PRIVATE_KEY", "ANTHROPIC_API_KEY",
-    "TELEGRAM_BOT_TOKEN", "MORALIS_API_KEY", "BIRDEYE_API_KEY",
+    "SOLANA_PRIVATE_KEY", "SOLANA_MNEMONIC", "ETH_PRIVATE_KEY", "ETH_MNEMONIC",
+    "ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN", "MORALIS_API_KEY", "BIRDEYE_API_KEY",
 }
 
 BOOL_FIELDS = {"ENABLE_SOL", "ENABLE_ETH", "ENABLE_SCANNER", "DRY_RUN"}
@@ -120,23 +123,33 @@ class Config:
                 lines.append(f"{key}={data[key]}")
         ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
+    @property
+    def has_sol_key(self) -> bool:
+        return bool(self.SOLANA_PRIVATE_KEY or self.SOLANA_MNEMONIC)
+
+    @property
+    def has_eth_key(self) -> bool:
+        return bool(self.ETH_PRIVATE_KEY or self.ETH_MNEMONIC)
+
     def is_configured(self) -> bool:
         """Mindestens eine Chain vollständig konfiguriert?"""
-        sol_ok = all(getattr(self, k) for k in
-                     ("SOLANA_RPC_URL", "SOLANA_PRIVATE_KEY", "TARGET_WALLET_SOL"))
-        eth_ok = all(getattr(self, k) for k in
-                     ("ETH_RPC_URL", "ETH_PRIVATE_KEY", "TARGET_WALLET_ETH"))
+        sol_ok = bool(self.SOLANA_RPC_URL and self.TARGET_WALLET_SOL and self.has_sol_key)
+        eth_ok = bool(self.ETH_RPC_URL and self.TARGET_WALLET_ETH and self.has_eth_key)
         return sol_ok or eth_ok
 
     def validate_sol(self):
-        missing = [k for k in ("SOLANA_RPC_URL", "SOLANA_WS_URL", "SOLANA_PRIVATE_KEY", "TARGET_WALLET_SOL")
+        missing = [k for k in ("SOLANA_RPC_URL", "SOLANA_WS_URL", "TARGET_WALLET_SOL")
                    if not getattr(self, k)]
+        if not self.has_sol_key:
+            missing.append("SOLANA_PRIVATE_KEY oder SOLANA_MNEMONIC")
         if missing:
             raise EnvironmentError(f"Fehlende Solana-Konfiguration: {missing}")
 
     def validate_eth(self):
-        missing = [k for k in ("ETH_RPC_URL", "ETH_WS_URL", "ETH_PRIVATE_KEY", "TARGET_WALLET_ETH")
+        missing = [k for k in ("ETH_RPC_URL", "ETH_WS_URL", "TARGET_WALLET_ETH")
                    if not getattr(self, k)]
+        if not self.has_eth_key:
+            missing.append("ETH_PRIVATE_KEY oder ETH_MNEMONIC")
         if missing:
             raise EnvironmentError(f"Fehlende ETH-Konfiguration: {missing}")
 

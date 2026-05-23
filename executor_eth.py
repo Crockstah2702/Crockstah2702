@@ -20,8 +20,9 @@ ETH_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
 
 class EthExecutor:
     def __init__(self):
+        from key_utils import get_eth_account
         self.w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(cfg.ETH_RPC_URL))
-        self.account = Account.from_key(cfg.ETH_PRIVATE_KEY)
+        self.account = get_eth_account()
         log.info(f"ETH-Wallet: {self.account.address}")
 
     async def execute(self, trade: TradeInfo):
