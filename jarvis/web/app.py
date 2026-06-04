@@ -4,6 +4,7 @@ import base64
 import json
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -17,12 +18,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Jarvis AI", version="1.0.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"]
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 _agent = None
 _tts = None
@@ -146,6 +142,63 @@ async def get_todos():
     return {"todos": list_todos()}
 
 
+# ─── Sentence-streaming TTS helper ───────────────────────────────────────────
+
+SENTENCE_END = re.compile(r'(?<=[.!?:»"\')\]])\s+|(?<=\n)\s*')
+
+
+def split_into_sentences(text: str) -> list[str]:
+    """Split text into sentences for progressive TTS."""
+    # Split at sentence boundaries
+    parts = re.split(r'(?<=[.!?])\s+(?=[A-ZÜÄÖ"\'])', text)
+    # Filter: skip very short fragments and code blocks
+    result = []
+    for p in parts:
+        p = p.strip()
+        if len(p) >= 8 and not p.startswith("```") and not p.startswith("ACTION:"):
+            result.append(p)
+    return result if result else [text]
+
+
+def clean_for_tts(text: str) -> str:
+    """Remove markdown for TTS."""
+    t = re.sub(r'```[\s\S]*?```', ' ', text)
+    t = re.sub(r'`[^`]+`', '', t)
+    t = re.sub(r'\*+([^*]+)\*+', r'\1', t)
+    t = re.sub(r'#{1,6}\s+', '', t)
+    t = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', t)
+    t = re.sub(r'[-*•]\s+', '', t)
+    t = re.sub(r'ACTION:.*', '', t)
+    t = re.sub(r'THOUGHT:.*', '', t)
+    t = re.sub(r'\s+', ' ', t)
+    return t.strip()
+
+
+async def stream_tts_sentences(websocket: WebSocket, text: str, tts):
+    """Generate and send TTS audio sentence by sentence."""
+    sentences = split_into_sentences(clean_for_tts(text))
+    for i, sentence in enumerate(sentences):
+        if not sentence.strip():
+            continue
+        try:
+            audio_bytes = await tts.generate_audio_bytes(sentence)
+            if audio_bytes:
+                await websocket.send_json({
+                    "type": "tts_chunk",
+                    "audio": base64.b64encode(audio_bytes).decode(),
+                    "format": "mp3",
+                    "index": i,
+                    "is_last": (i == len(sentences) - 1)
+                })
+                # Small pause between chunks to avoid overloading browser audio queue
+                await asyncio.sleep(0.05)
+        except Exception as e:
+            logger.error(f"TTS chunk error: {e}")
+    await websocket.send_json({"type": "tts_done"})
+
+
+# ─── WebSocket endpoint ───────────────────────────────────────────────────────
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -156,8 +209,8 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_json()
             msg_type = data.get("type", "chat")
 
-            # ── Text-Chat ──────────────────────────────────────────────
-            if msg_type == "chat":
+            # ── Text- oder Voice-Chat ─────────────────────────────────
+            if msg_type in ("chat", "voice_chat"):
                 user_message = data.get("message", "").strip()
                 use_tts = data.get("tts", False)
                 if not user_message:
@@ -165,31 +218,60 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 await websocket.send_json({"type": "start", "session_id": session_id})
 
-                final_response = ""
-                async for event in _agent.chat_stream(user_message, session_id):
-                    await websocket.send_json(event)
-                    if event["type"] == "done":
-                        final_response = event.get("response", "")
+                # Stream LLM response
+                sentence_buffer = ""
+                full_response = ""
+                tts_queue: list[str] = []
+                tts_task: Optional[asyncio.Task] = None
 
-                # TTS: generate audio on server, send base64 to browser
-                if use_tts and _tts and final_response:
-                    await websocket.send_json({"type": "tts_start"})
+                async def flush_tts(text: str):
+                    """Send one TTS sentence asynchronously."""
+                    if not _tts or not use_tts:
+                        return
+                    cleaned = clean_for_tts(text).strip()
+                    if len(cleaned) < 5:
+                        return
                     try:
-                        audio_bytes = await _tts.generate_audio_bytes(final_response)
+                        audio_bytes = await _tts.generate_audio_bytes(cleaned)
                         if audio_bytes:
-                            audio_b64 = base64.b64encode(audio_bytes).decode()
                             await websocket.send_json({
-                                "type": "tts_audio",
-                                "audio": audio_b64,
-                                "format": "mp3"
+                                "type": "tts_chunk",
+                                "audio": base64.b64encode(audio_bytes).decode(),
+                                "format": "mp3",
                             })
-                        else:
-                            await websocket.send_json({"type": "tts_fallback", "text": final_response})
                     except Exception as e:
-                        logger.error(f"TTS error: {e}")
-                        await websocket.send_json({"type": "tts_fallback", "text": final_response})
+                        logger.error(f"TTS flush error: {e}")
 
-            # ── Spracheingabe: Audio → Whisper → Text ──────────────────
+                async for event in _agent.chat_stream(user_message, session_id):
+                    if event["type"] == "token":
+                        token = event["content"]
+                        sentence_buffer += token
+                        full_response += token
+
+                        # Check for sentence boundary → flush TTS immediately
+                        if use_tts and _tts:
+                            match = re.search(r'([^.!?\n]{15,}[.!?])\s', sentence_buffer)
+                            if match:
+                                sentence = match.group(1)
+                                sentence_buffer = sentence_buffer[match.end():]
+                                # Fire-and-forget TTS for this sentence
+                                asyncio.create_task(flush_tts(sentence))
+
+                    await websocket.send_json(event)
+
+                    if event["type"] == "done":
+                        full_response = event.get("response", full_response)
+                        # Flush remaining buffer as TTS
+                        if use_tts and _tts and sentence_buffer.strip():
+                            asyncio.create_task(flush_tts(sentence_buffer))
+
+                # Send TTS-done signal after all chunks are dispatched
+                if use_tts and _tts:
+                    # Wait a bit for last TTS tasks to dispatch
+                    await asyncio.sleep(0.3)
+                    await websocket.send_json({"type": "tts_done"})
+
+            # ── Spracheingabe: Audio → Whisper ────────────────────────
             elif msg_type == "voice_data":
                 audio_b64 = data.get("audio", "")
                 audio_format = data.get("format", "webm")
@@ -213,54 +295,59 @@ async def websocket_endpoint(websocket: WebSocket):
                             pass
 
                         if text and text.strip():
-                            await websocket.send_json({
-                                "type": "transcription",
-                                "text": text.strip()
-                            })
+                            await websocket.send_json({"type": "transcription", "text": text.strip()})
 
-                            # Auto-send: direkt als Chat weiterverarbeiten
-                            if data.get("auto_send", True):
-                                use_tts = data.get("tts", True)
-                                await websocket.send_json({
-                                    "type": "start",
-                                    "session_id": session_id,
-                                    "from_voice": True
-                                })
-                                final_response = ""
-                                async for event in _agent.chat_stream(text.strip(), session_id):
-                                    await websocket.send_json(event)
-                                    if event["type"] == "done":
-                                        final_response = event.get("response", "")
+                            # Auto-send: process as voice_chat immediately
+                            use_tts = data.get("tts", True)
+                            await websocket.send_json({"type": "start", "session_id": session_id, "from_voice": True})
 
-                                # TTS-Antwort zurück an Browser
-                                if use_tts and _tts and final_response:
-                                    await websocket.send_json({"type": "tts_start"})
-                                    try:
-                                        audio_bytes = await _tts.generate_audio_bytes(final_response)
-                                        if audio_bytes:
-                                            await websocket.send_json({
-                                                "type": "tts_audio",
-                                                "audio": base64.b64encode(audio_bytes).decode(),
-                                                "format": "mp3"
-                                            })
-                                        else:
-                                            await websocket.send_json({
-                                                "type": "tts_fallback",
-                                                "text": final_response
-                                            })
-                                    except Exception as e:
-                                        logger.error(f"TTS error: {e}")
+                            sentence_buffer = ""
+                            full_response = ""
+
+                            async def flush_tts_voice(t: str):
+                                cleaned = clean_for_tts(t).strip()
+                                if not cleaned or len(cleaned) < 5:
+                                    return
+                                try:
+                                    ab = await _tts.generate_audio_bytes(cleaned)
+                                    if ab:
+                                        await websocket.send_json({
+                                            "type": "tts_chunk",
+                                            "audio": base64.b64encode(ab).decode(),
+                                            "format": "mp3",
+                                        })
+                                except Exception:
+                                    pass
+
+                            async for event in _agent.chat_stream(text.strip(), session_id):
+                                if event["type"] == "token":
+                                    token = event["content"]
+                                    sentence_buffer += token
+                                    full_response += token
+                                    if use_tts and _tts:
+                                        match = re.search(r'([^.!?\n]{15,}[.!?])\s', sentence_buffer)
+                                        if match:
+                                            sentence = match.group(1)
+                                            sentence_buffer = sentence_buffer[match.end():]
+                                            asyncio.create_task(flush_tts_voice(sentence))
+
+                                await websocket.send_json(event)
+
+                                if event["type"] == "done":
+                                    full_response = event.get("response", full_response)
+                                    if use_tts and _tts and sentence_buffer.strip():
+                                        asyncio.create_task(flush_tts_voice(sentence_buffer))
+
+                            if use_tts and _tts:
+                                await asyncio.sleep(0.3)
+                                await websocket.send_json({"type": "tts_done"})
                         else:
                             await websocket.send_json({"type": "transcription", "text": ""})
 
                     except Exception as e:
                         logger.error(f"STT error: {e}")
-                        await websocket.send_json({
-                            "type": "stt_error",
-                            "message": f"Spracherkennung fehlgeschlagen: {e}"
-                        })
+                        await websocket.send_json({"type": "stt_error", "message": str(e)})
                 else:
-                    # Kein Whisper → Web Speech API hat schon transkribiert, Text kommt direkt
                     await websocket.send_json({"type": "stt_unavailable"})
 
             elif msg_type == "ping":

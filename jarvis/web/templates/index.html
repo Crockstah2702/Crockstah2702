@@ -509,8 +509,10 @@ let recTimerInterval = null;
 let recSeconds = 0;
 let analyser = null;
 let animFrameId = null;
-let useBrowserSTT = false;  // Fallback: Web Speech API
+let useBrowserSTT = false;
 let recognition = null;
+// Echtzeit-Audio
+// audioQueue, isPlayingQueue, ttsAllChunksReceived defined below with AudioQueue
 
 // ════════════════════════════════════════════════
 //  INIT
@@ -574,29 +576,32 @@ function handleWSMsg(data) {
       break;
 
     case 'done':
-      setCircle('idle');
-      setCircleText('BEREIT');
       unhighlightTools();
       if (currentBubble) updateBubble(currentBubble, data.response);
       setSending(false);
       scrollDown();
       loadStats();
       loadFacts();
+      // Wenn kein TTS → sofort idle; sonst wartet onSpeakDone
+      if (!ttsEnabled || audioQueue.length === 0) {
+        setCircle('idle');
+        setCircleText('BEREIT');
+        if (autoListenEnabled && !isRecording) setTimeout(() => startRecording(), 400);
+      }
       break;
 
-    case 'tts_start':
-      setCircle('speaking');
-      setCircleText('SPRICHT');
-      showVoiceStatus('JARVIS SPRICHT...', 'speaking');
-      isSpeaking = true;
+    case 'tts_chunk':
+      // Echtzeit: Satz-für-Satz Audio in Queue einreihen
+      enqueueAudio(data.audio, data.format || 'mp3');
       break;
 
-    case 'tts_audio':
-      playAudioB64(data.audio, data.format || 'mp3');
+    case 'tts_done':
+      // Alle Chunks gesendet — Queue läuft weiter bis leer
+      ttsAllChunksReceived = true;
+      if (!isPlayingQueue && audioQueue.length === 0) onSpeakDone();
       break;
 
     case 'tts_fallback':
-      // Edge-TTS nicht verfügbar → Web Speech API
       if (ttsEnabled && 'speechSynthesis' in window) {
         browserSpeak(data.text);
       } else {
@@ -641,25 +646,55 @@ function handleWSMsg(data) {
 }
 
 // ════════════════════════════════════════════════
-//  AUDIO: TTS-Wiedergabe im Browser
+//  ECHTZEIT-AUDIO-QUEUE: Satz-für-Satz abspielen
 // ════════════════════════════════════════════════
-function playAudioB64(b64, format) {
-  const audio = document.getElementById('ttsAudio');
+const audioQueue = [];
+let isPlayingQueue = false;
+let ttsAllChunksReceived = false;
+let currentAudio = null;
+
+function enqueueAudio(b64, format) {
   const mime = format === 'mp3' ? 'audio/mpeg' : 'audio/ogg';
-  audio.src = `data:${mime};base64,${b64}`;
-  audio.onended = onSpeakDone;
-  audio.onerror = onSpeakDone;
-  audio.play().catch(() => onSpeakDone());
+  audioQueue.push({ b64, mime });
+  if (!isPlayingQueue) {
+    setCircle('speaking');
+    setCircleText('SPRICHT');
+    showVoiceStatus('JARVIS SPRICHT...', 'speaking');
+    isSpeaking = true;
+    playNextChunk();
+  }
+}
+
+function playNextChunk() {
+  if (audioQueue.length === 0) {
+    isPlayingQueue = false;
+    if (ttsAllChunksReceived) onSpeakDone();
+    return;
+  }
+  isPlayingQueue = true;
+  const { b64, mime } = audioQueue.shift();
+  currentAudio = new Audio(`data:${mime};base64,${b64}`);
+  currentAudio.onended = playNextChunk;
+  currentAudio.onerror = playNextChunk;
+  currentAudio.play().catch(playNextChunk);
+}
+
+function stopSpeaking() {
+  audioQueue.length = 0;
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  isPlayingQueue = false;
+  ttsAllChunksReceived = false;
+  onSpeakDone();
 }
 
 function onSpeakDone() {
   isSpeaking = false;
+  ttsAllChunksReceived = false;
   setCircle('idle');
   setCircleText('BEREIT');
   hideVoiceStatus();
-  // Auto-Hören: nach Antwort automatisch wieder zuhören
   if (autoListenEnabled && !isRecording && !isThinking) {
-    setTimeout(() => startRecording(), 600);
+    setTimeout(() => startRecording(), 400);
   }
 }
 
@@ -724,68 +759,108 @@ async function toggleVoice() {
   }
 }
 
-async function startRecording() {
-  if (isRecording || isThinking || isSpeaking) return;
+// VAD-Parameter
+const VAD_SILENCE_THRESHOLD = 0.012;   // Lautstärke-Schwelle (0-1)
+const VAD_SILENCE_MS        = 1200;    // ms Stille → automatisch stoppen
+const VAD_MIN_SPEECH_MS     = 300;     // mindestens so lange sprechen
+let vadSilenceTimer = null;
+let vadSpeechStart  = null;
+let vadAudioCtx     = null;
+let vadStream       = null;
 
-  // Wenn Server-Whisper nicht verfügbar → Browser-STT
+async function startRecording() {
+  if (isRecording || isThinking) return;
+
+  // Wenn Jarvis gerade spricht → unterbrechen (natürliches Gespräch)
+  if (isSpeaking) stopSpeaking();
+
+  // Browser-STT fallback
   if (useBrowserSTT && recognition) {
     recognition.start();
     isRecording = true;
     setVoiceBtnState('recording');
     showVoiceStatus('HÖRE ZU...', '');
-    showWaveform(false);
     startRecTimer();
     return;
   }
 
-  // Mikrofon-Zugriff
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    vadStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     isRecording = true;
+    vadSpeechStart = Date.now();
     setVoiceBtnState('recording');
     showVoiceStatus('HÖRE ZU...', '');
     showWaveform(true);
     startRecTimer();
-    drawWaveform(stream);
 
-    // MediaRecorder: bevorzuge WebM, Fallback auf OGG
+    // Web Audio für VAD + Waveform
+    vadAudioCtx = new AudioContext();
+    analyser = vadAudioCtx.createAnalyser();
+    analyser.fftSize = 512;
+    vadAudioCtx.createMediaStreamSource(vadStream).connect(analyser);
+
+    // MediaRecorder
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
-        ? 'audio/ogg;codecs=opus'
-        : '';
+      ? 'audio/webm;codecs=opus' : '';
     const opts = mimeType ? { mimeType } : {};
-    mediaRecorder = new MediaRecorder(stream, opts);
+    mediaRecorder = new MediaRecorder(vadStream, opts);
     audioChunks = [];
-
     mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
     mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop());
+      vadStream.getTracks().forEach(t => t.stop());
       stopWaveform();
+      if (vadAudioCtx) { vadAudioCtx.close(); vadAudioCtx = null; }
       const fmt = mimeType.includes('ogg') ? 'ogg' : 'webm';
       const blob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
       await sendAudioToServer(blob, fmt);
     };
+    mediaRecorder.start(200);
 
-    mediaRecorder.start(250);
+    // VAD-Schleife
+    runVAD();
   } catch (err) {
-    showNotification('Mikrofon nicht verfügbar: ' + err.message);
+    showNotification('Mikrofon: ' + err.message);
     isRecording = false;
     setVoiceBtnState('idle');
     hideVoiceStatus();
   }
 }
 
+function runVAD() {
+  if (!isRecording || !analyser) return;
+  drawWaveformFrame();
+
+  const buf = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buf);
+  const rms = Math.sqrt(buf.reduce((s, v) => s + v * v, 0) / buf.length);
+
+  const speakingLongEnough = (Date.now() - vadSpeechStart) > VAD_MIN_SPEECH_MS;
+
+  if (rms > VAD_SILENCE_THRESHOLD) {
+    // Sprache erkannt → Stille-Timer zurücksetzen
+    if (vadSilenceTimer) { clearTimeout(vadSilenceTimer); vadSilenceTimer = null; }
+  } else if (speakingLongEnough) {
+    // Stille → Timer starten wenn nicht schon läuft
+    if (!vadSilenceTimer) {
+      vadSilenceTimer = setTimeout(() => {
+        if (isRecording) stopRecording();
+      }, VAD_SILENCE_MS);
+    }
+  }
+
+  animFrameId = requestAnimationFrame(runVAD);
+}
+
 function stopRecording() {
   if (!isRecording) return;
   isRecording = false;
+  if (vadSilenceTimer) { clearTimeout(vadSilenceTimer); vadSilenceTimer = null; }
   stopRecTimer();
 
   if (useBrowserSTT && recognition) {
     recognition.stop();
     setVoiceBtnState('processing');
     showVoiceStatus('VERARBEITE...', '');
-    // Nach kurzer Pause Text aus Input-Box holen und senden
     setTimeout(() => {
       const txt = document.getElementById('inputBox').value.trim();
       setVoiceBtnState('idle');
@@ -821,33 +896,30 @@ async function sendAudioToServer(blob, format) {
   }
 }
 
-// Waveform-Visualisierung
-function drawWaveform(stream) {
-  const ctx = new AudioContext();
-  analyser = ctx.createAnalyser();
-  analyser.fftSize = 256;
-  ctx.createMediaStreamSource(stream).connect(analyser);
+// Waveform-Visualisierung (ein Frame, aufgerufen von runVAD)
+function drawWaveform(stream) { /* wird via runVAD gezeichnet */ }
+
+function drawWaveformFrame() {
+  if (!analyser) return;
   const canvas = document.getElementById('waveform');
+  if (!canvas) return;
   const cc = canvas.getContext('2d');
   const buf = new Uint8Array(analyser.frequencyBinCount);
-
-  function draw() {
-    if (!isRecording) return;
-    animFrameId = requestAnimationFrame(draw);
-    analyser.getByteFrequencyData(buf);
-    cc.clearRect(0, 0, canvas.width, canvas.height);
-    cc.fillStyle = '#ff4444';
-    const bw = canvas.width / buf.length;
-    for (let i = 0; i < buf.length; i++) {
-      const h = (buf[i] / 255) * canvas.height;
-      cc.fillRect(i * bw, canvas.height - h, bw - 1, h);
-    }
+  analyser.getByteFrequencyData(buf);
+  cc.clearRect(0, 0, canvas.width, canvas.height);
+  cc.fillStyle = '#ff4444';
+  const bw = canvas.width / buf.length;
+  for (let i = 0; i < buf.length; i++) {
+    const h = (buf[i] / 255) * canvas.height;
+    cc.fillRect(i * bw, canvas.height - h, bw - 1, h);
   }
-  draw();
 }
 
 function stopWaveform() {
-  if (animFrameId) cancelAnimationFrame(animFrameId);
+  if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+  const canvas = document.getElementById('waveform');
+  if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+  showWaveform(false);
 }
 
 // ════════════════════════════════════════════════
