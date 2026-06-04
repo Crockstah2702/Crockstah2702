@@ -1,0 +1,71 @@
+jarvis:
+  name: "Jarvis"
+  language: "de"  # de = Deutsch, en = English
+  personality: |
+    Du bist Jarvis, ein hochentwickelter lokaler KI-Assistent.
+    Du bist extrem hilfreich, direkt und kompetent.
+    Du kannst selbstständig lernen, Aufgaben planen und ausführen.
+    Du antwortest auf Deutsch, es sei denn, der User spricht Englisch.
+    Du bist proaktiv und machst Vorschläge.
+    Du hast Zugriff auf viele Tools und nutzt sie aktiv.
+
+llm:
+  provider: "ollama"
+  base_url: "http://localhost:11434"
+  default_model: "llama3.2:3b"       # Schnelles Modell für einfache Aufgaben
+  powerful_model: "llama3.1:8b"       # Für komplexe Aufgaben
+  embedding_model: "nomic-embed-text" # Für Vektorspeicher
+  temperature: 0.7
+  max_tokens: 4096
+  context_window: 8192
+
+memory:
+  db_path: "./data/memory.db"
+  vector_db_path: "./data/chroma"
+  max_conversation_history: 50
+  auto_learn: true
+  learning_threshold: 3   # Lerne nach X Interaktionen zum gleichen Thema
+  summarize_after: 20     # Fasse Gespräch zusammen nach X Nachrichten
+
+tools:
+  web_search:
+    enabled: true
+    max_results: 5
+  file_ops:
+    enabled: true
+    allowed_paths:
+      - "~/Documents"
+      - "~/Desktop"
+      - "~/Downloads"
+      - "/tmp/jarvis"
+  code_runner:
+    enabled: true
+    timeout: 30
+    sandbox: true
+  system_info:
+    enabled: true
+  calculator:
+    enabled: true
+  notes:
+    enabled: true
+    path: "./data/notes"
+  weather:
+    enabled: true
+
+voice:
+  stt:
+    enabled: true
+    model: "base"          # tiny, base, small, medium, large
+    language: "de"
+    device: "cpu"          # cpu oder cuda
+  tts:
+    enabled: true
+    voice: "de-DE-KillianNeural"  # Deutsche Stimme
+    rate: "+10%"
+    volume: "+0%"
+
+web:
+  host: "0.0.0.0"
+  port: 7860
+  debug: false
+  auto_open_browser: true
