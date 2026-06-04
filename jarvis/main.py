@@ -165,14 +165,15 @@ async def main():
     print("""
 ╔═══════════════════════════════════════════════════════╗
 ║                                                       ║
-║     ██╗ █████╗ ██████╗ ██╗   ██╗██╗███████╗          ║
-║     ██║██╔══██╗██╔══██╗██║   ██║██║██╔════╝          ║
-║     ██║███████║██████╔╝██║   ██║██║███████╗          ║
-║██   ██║██╔══██║██╔══██╗╚██╗ ██╔╝██║╚════██║          ║
-║╚█████╔╝██║  ██║██║  ██║ ╚████╔╝ ██║███████║          ║
-║ ╚════╝ ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝╚══════╝          ║
+║       █████╗ ██████╗ ██╗ █████╗                      ║
+║      ██╔══██╗██╔══██╗██║██╔══██╗                     ║
+║      ███████║██████╔╝██║███████║                     ║
+║      ██╔══██║██╔══██╗██║██╔══██║                     ║
+║      ██║  ██║██║  ██║██║██║  ██║                     ║
+║      ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═╝                     ║
 ║                                                       ║
-║         Lokaler KI-Assistent — Kein API nötig         ║
+║  Artificial Responsive Intelligence Assistant         ║
+║  Lokale KI mit Persönlichkeit — Kein API nötig        ║
 ╚═══════════════════════════════════════════════════════╝
     """)
 
@@ -258,7 +259,7 @@ async def main():
     host = web_cfg.get("host", "0.0.0.0")
     port = web_cfg.get("port", 7860)
 
-    print(f"\n✅ Jarvis bereit!")
+    print(f"\n✅ ARIA bereit!")
     print(f"🌐 Web-Interface: http://localhost:{port}")
     print(f"📡 API: http://localhost:{port}/api/status")
     print(f"\nStrg+C zum Beenden\n")
@@ -291,4 +292,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n\n👋 Jarvis wird beendet...")
+        print("\n\n👋 ARIA wird beendet...")

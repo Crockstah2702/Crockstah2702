@@ -221,7 +221,7 @@ class JarvisAgent:
         self.learner = learner
         self.tools = tool_registry
         self.consciousness = consciousness
-        self.name = config.get("name", "Jarvis")
+        self.name = config.get("name", "ARIA")
         self.personality = config.get("personality", "")
         self.current_session = None
         self.max_tool_iterations = 5
@@ -394,7 +394,7 @@ class JarvisAgent:
 
         # Store in vector memory for future recall
         try:
-            combined = f"User: {user_message}\nJarvis: {clean_response}"
+            combined = f"User: {user_message}\nARIA: {clean_response}"
             embedding = await self.llm.embed(combined)
             if embedding:
                 self.vector.add_conversation(user_message, clean_response, embedding, session_id)
@@ -405,7 +405,7 @@ class JarvisAgent:
         if self.consciousness:
             self.consciousness.react_to_message(user_message)
             # Async tasks run in background, don't block response
-            conversation_snippet = f"User: {user_message}\nJarvis: {clean_response}"
+            conversation_snippet = f"User: {user_message}\nARIA: {clean_response}"
             asyncio.create_task(self.consciousness.reflect(conversation_snippet))
             asyncio.create_task(self.consciousness.maybe_update_goals(conversation_snippet))
 

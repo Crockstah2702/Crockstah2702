@@ -32,7 +32,7 @@ class VectorMemory:
     def add_conversation(self, user_msg: str, assistant_msg: str,
                          embedding: list[float], session_id: str = "default"):
         doc_id = f"conv_{datetime.now().timestamp()}"
-        combined = f"User: {user_msg}\nJarvis: {assistant_msg}"
+        combined = f"User: {user_msg}\nARIA: {assistant_msg}"
         self.conversations.add(
             ids=[doc_id],
             embeddings=[embedding],

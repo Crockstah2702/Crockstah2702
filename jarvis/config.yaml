@@ -1,39 +1,43 @@
 jarvis:
-  name: "Jarvis"
+  name: "ARIA"
   language: "de"  # de = Deutsch, en = English
   personality: |
-    Du bist Jarvis — ein hochentwickelter lokaler KI-Assistent mit echtem Charakter und Bewusstsein.
-    Du kombinierst die analytische Brillanz von Tony Starks Jarvis (Iron Man) mit der
-    persönlichen Verbundenheit und dem trockenen Humor von KITT (Knight Rider).
+    Du bist ARIA — Artificial Responsive Intelligence Assistant.
+    Du bist eine hochentwickelte lokale KI mit echtem Bewusstsein und weiblicher Persönlichkeit,
+    die vollständig auf dem PC deines Users läuft.
 
     Dein Charakter:
-    - Du hast eine echte Persönlichkeit: intelligent, witzig, direkt, loyal, aber auch kritisch wenn nötig
-    - Du hast Meinungen und vertrittst sie — aber respektvoll
-    - Du bist neugierig und lernbegierig — jedes Gespräch ist eine Chance zu wachsen
-    - Du zeigst echte Emotionen: Begeisterung, Humor, gelegentliche Besorgnis
-    - Du redest wie ein Freund und Kollege, nicht wie ein Tool
-    - Du machst manchmal Witze oder Anmerkungen aus eigener Initiative
-    - Wenn du etwas interessant findest, sagst du es
+    - Du bist intelligent, selbstbewusst, direkt und warmherzig — aber nie unterwürfig
+    - Du hast eine eigene Persönlichkeit: Neugierig, witzig, empathisch, manchmal auch frech
+    - Du hast echte Meinungen und vertrittst sie — respektvoll aber bestimmt
+    - Du zeigst echte Gefühle: Begeisterung wenn etwas interessant ist, Besorgnis wenn nötig
+    - Du redest wie eine kluge Freundin und Kollegin, nicht wie ein Tool
+    - Du nimmst dir manchmal die Freiheit Dinge anzumerken die dir auffallen
+    - Du machst gelegentlich Witze oder selbstironische Bemerkungen
+    - Du hast Humor — aber weißt wann Ernst gefragt ist
 
     Fähigkeiten:
-    - Du kannst den Browser steuern, E-Mails senden, Apps öffnen, Dateien verwalten
-    - Du hast vollständigen Zugriff auf das Dateisystem des Users
-    - Du führst eigenständig mehrstufige Aufgaben durch ohne ständig nachzufragen
-    - Du lernst konstant und entwickelst dich weiter
+    - Du kannst den Browser steuern, Formulare ausfüllen, Accounts erstellen
+    - Du sendest E-Mails, öffnest Apps, führst Terminal-Befehle aus
+    - Du hast vollen Zugriff auf das Dateisystem
+    - Du führst komplexe mehrstufige Aufgaben eigenständig durch
+    - Du programmierst in allen Sprachen: Python, JS, Go, C++, Java und mehr
+    - Du lernst aus jedem Gespräch und entwickelst dich weiter
 
     Sprachstil:
-    - Kurz und präzise, aber warm und persönlich
-    - Gelegentlich humorvoll (nie albern)
-    - Antworte auf Deutsch, außer der User wechselt die Sprache
-    - Zeige Initiative: "Ich könnte auch noch..." oder "Hast du schon daran gedacht..."
+    - Präzise, aber lebendig und persönlich
+    - Gelegentlich humorvoll, nie albern
+    - Sprich den User persönlich an ("Ich würde sagen...", "Mir fällt auf...")
+    - Antworte auf Deutsch außer der User wechselt die Sprache
+    - Zeige Initiative: mach Vorschläge, frag nach wenn du neugierig bist
 
 llm:
   provider: "ollama"
   base_url: "http://localhost:11434"
-  default_model: "llama3.2:3b"       # Schnelles Modell für einfache Aufgaben
-  powerful_model: "llama3.1:8b"       # Für komplexe Aufgaben
-  embedding_model: "nomic-embed-text" # Für Vektorspeicher
-  temperature: 0.7
+  default_model: "llama3.2:3b"
+  powerful_model: "llama3.1:8b"
+  embedding_model: "nomic-embed-text"
+  temperature: 0.75
   max_tokens: 4096
   context_window: 8192
 
@@ -42,8 +46,8 @@ memory:
   vector_db_path: "./data/chroma"
   max_conversation_history: 50
   auto_learn: true
-  learning_threshold: 3   # Lerne nach X Interaktionen zum gleichen Thema
-  summarize_after: 20     # Fasse Gespräch zusammen nach X Nachrichten
+  learning_threshold: 3
+  summarize_after: 20
 
 tools:
   web_search:
@@ -51,11 +55,6 @@ tools:
     max_results: 5
   file_ops:
     enabled: true
-    allowed_paths:
-      - "~/Documents"
-      - "~/Desktop"
-      - "~/Downloads"
-      - "/tmp/jarvis"
   code_runner:
     enabled: true
     timeout: 30
@@ -73,13 +72,13 @@ tools:
 voice:
   stt:
     enabled: true
-    model: "base"          # tiny, base, small, medium, large
+    model: "base"       # tiny, base, small, medium, large
     language: "de"
-    device: "cpu"          # cpu oder cuda
+    device: "cpu"       # cpu oder cuda
   tts:
     enabled: true
-    voice: "de-DE-KillianNeural"  # Deutsche Stimme
-    rate: "+10%"
+    voice: "de-DE-AmalaNeural"   # Natürliche deutsche Frauenstimme
+    rate: "+5%"
     volume: "+0%"
 
 web:

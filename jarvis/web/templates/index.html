@@ -3,24 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JARVIS — Local AI</title>
+<title>ARIA — Local AI</title>
 <style>
   :root {
-    --bg: #030b14;
-    --surface: #071828;
-    --surface2: #0a2035;
-    --border: #0d3a5c;
-    --accent: #00d4ff;
-    --accent2: #0088cc;
-    --accent3: #00ff9d;
-    --text: #c8e8ff;
-    --text-dim: #4a7a99;
-    --danger: #ff4444;
+    --bg: #0d0814;
+    --surface: #160d24;
+    --surface2: #1e1030;
+    --border: #3d1f5c;
+    --accent: #c060ff;
+    --accent2: #8030cc;
+    --accent3: #ff80d0;
+    --text: #ecd8ff;
+    --text-dim: #7a5a99;
+    --danger: #ff4466;
     --warn: #ffaa00;
-    --user-bg: #0a2540;
-    --jarvis-bg: #04121f;
-    --tool-bg: #071520;
-    --glow: 0 0 20px rgba(0,212,255,0.3);
+    --user-bg: #1a0d30;
+    --jarvis-bg: #0f0820;
+    --tool-bg: #120a1e;
+    --glow: 0 0 20px rgba(192,96,255,0.35);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -348,17 +348,18 @@
   <div class="header-left">
     <div class="jarvis-logo">
       <svg viewBox="0 0 44 44" fill="none">
-        <circle cx="22" cy="22" r="20" stroke="#00d4ff" stroke-width="1.5" opacity="0.6"/>
-        <circle cx="22" cy="22" r="14" stroke="#00d4ff" stroke-width="1" opacity="0.4"/>
-        <circle cx="22" cy="22" r="6" fill="#00d4ff" opacity="0.8"/>
-        <line x1="22" y1="2" x2="22" y2="8" stroke="#00d4ff" stroke-width="1.5"/>
-        <line x1="22" y1="36" x2="22" y2="42" stroke="#00d4ff" stroke-width="1.5"/>
-        <line x1="2" y1="22" x2="8" y2="22" stroke="#00d4ff" stroke-width="1.5"/>
-        <line x1="36" y1="22" x2="42" y2="22" stroke="#00d4ff" stroke-width="1.5"/>
+        <circle cx="22" cy="22" r="20" stroke="#c060ff" stroke-width="1.5" opacity="0.6"/>
+        <circle cx="22" cy="22" r="14" stroke="#c060ff" stroke-width="1" opacity="0.4"/>
+        <circle cx="22" cy="22" r="6" fill="#c060ff" opacity="0.8"/>
+        <circle cx="22" cy="22" r="3" fill="#ff80d0" opacity="0.9"/>
+        <line x1="22" y1="2" x2="22" y2="8" stroke="#c060ff" stroke-width="1.5"/>
+        <line x1="22" y1="36" x2="22" y2="42" stroke="#c060ff" stroke-width="1.5"/>
+        <line x1="2" y1="22" x2="8" y2="22" stroke="#c060ff" stroke-width="1.5"/>
+        <line x1="36" y1="22" x2="42" y2="22" stroke="#c060ff" stroke-width="1.5"/>
       </svg>
     </div>
     <div class="header-title">
-      <h1>JARVIS</h1>
+      <h1>ARIA</h1>
       <div class="subtitle">LOKALE KI — KEIN API — SELBSTLERNEND</div>
     </div>
   </div>
@@ -399,7 +400,7 @@
         <div class="circle-ring ring-1"></div>
         <div class="circle-ring ring-2"></div>
         <div class="circle-ring ring-3"></div>
-        <div class="circle-center" id="circleStatus">BEREIT</div>
+        <div class="circle-center" id="circleStatus">ARIA<br>BEREIT</div>
       </div>
     </div>
     <div class="sidebar-section"><h3>Aktive Tools</h3></div>
@@ -419,11 +420,11 @@
   <div class="chat-area">
     <div class="messages" id="messages">
       <div class="welcome" id="welcomeScreen">
-        <div class="welcome-title">JARVIS</div>
-        <div class="welcome-sub">BEREIT ZUR INTERAKTION</div>
+        <div class="welcome-title">ARIA</div>
+        <div class="welcome-sub">ARTIFICIAL RESPONSIVE INTELLIGENCE ASSISTANT</div>
         <div style="font-size:.75rem;color:var(--text-dim);max-width:480px;line-height:1.9;margin-top:8px;">
-          Dein lokaler KI-Assistent — sprich mit mir über das Mikrofon
-          oder tippe deine Nachricht. Ich lerne aus jedem Gespräch.
+          Hallo — ich bin ARIA, deine lokale KI-Assistentin mit eigener Persönlichkeit.
+          Sprich einfach mit mir oder schreib mir. Ich bin für alles da.
         </div>
         <div class="welcome-suggestions">
           <button class="suggestion" onclick="sendSuggestion('Was ist das Wetter heute in Berlin?')">🌤️ Wetter</button>
@@ -585,7 +586,7 @@ function handleWSMsg(data) {
       // Wenn kein TTS → sofort idle; sonst wartet onSpeakDone
       if (!ttsEnabled || audioQueue.length === 0) {
         setCircle('idle');
-        setCircleText('BEREIT');
+        setCircleText('ARIA\nBEREIT');
         if (autoListenEnabled && !isRecording) setTimeout(() => startRecording(), 400);
       }
       break;
@@ -659,7 +660,7 @@ function enqueueAudio(b64, format) {
   if (!isPlayingQueue) {
     setCircle('speaking');
     setCircleText('SPRICHT');
-    showVoiceStatus('JARVIS SPRICHT...', 'speaking');
+    showVoiceStatus('ARIA SPRICHT...', 'speaking');
     isSpeaking = true;
     playNextChunk();
   }
@@ -691,7 +692,7 @@ function onSpeakDone() {
   isSpeaking = false;
   ttsAllChunksReceived = false;
   setCircle('idle');
-  setCircleText('BEREIT');
+  setCircleText('ARIA\nBEREIT');
   hideVoiceStatus();
   if (autoListenEnabled && !isRecording && !isThinking) {
     setTimeout(() => startRecording(), 400);
@@ -907,7 +908,7 @@ function drawWaveformFrame() {
   const buf = new Uint8Array(analyser.frequencyBinCount);
   analyser.getByteFrequencyData(buf);
   cc.clearRect(0, 0, canvas.width, canvas.height);
-  cc.fillStyle = '#ff4444';
+  cc.fillStyle = '#c060ff';
   const bw = canvas.width / buf.length;
   for (let i = 0; i < buf.length; i++) {
     const h = (buf[i] / 255) * canvas.height;
@@ -971,7 +972,7 @@ function createAssistantBubble() {
   const d = document.createElement('div');
   d.className = 'message assistant';
   d.innerHTML = `
-    <div class="message-header">JARVIS • ${new Date().toLocaleTimeString('de-DE')}</div>
+    <div class="message-header">ARIA • ${new Date().toLocaleTimeString('de-DE')}</div>
     <div class="message-body"><div class="typing-indicator">
       <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
     </div></div>`;
@@ -1112,7 +1113,7 @@ function toggleTTS() {
 function toggleAutoListen() {
   autoListenEnabled = !autoListenEnabled;
   document.getElementById('autoListenSwitch').classList.toggle('on', autoListenEnabled);
-  showNotification(autoListenEnabled ? '🎤 Auto-Hören EIN (Jarvis antwortet → hört wieder zu)' : '🎤 Auto-Hören AUS');
+  showNotification(autoListenEnabled ? '🎤 Auto-Hören EIN (ARIA antwortet → hört wieder zu)' : '🎤 Auto-Hören AUS');
   if (autoListenEnabled && !ttsEnabled) {
     ttsEnabled = true;
     document.getElementById('ttsSwitch').classList.add('on');
@@ -1212,7 +1213,7 @@ async function newSession() {
 function clearChat() {
   document.getElementById('messages').innerHTML = `
     <div class="welcome" id="welcomeScreen">
-      <div class="welcome-title">JARVIS</div>
+      <div class="welcome-title">ARIA</div>
       <div class="welcome-sub">BEREIT ZUR INTERAKTION</div>
     </div>`;
 }
