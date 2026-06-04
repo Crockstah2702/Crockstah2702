@@ -56,6 +56,35 @@ class OllamaLLM:
                     except Exception:
                         pass
 
+    async def _check_chat_api(self) -> bool:
+        """Check if /api/chat is available (Ollama >= 0.1.14)."""
+        try:
+            resp = await self._client.post(
+                f"{self.base_url}/api/chat",
+                json={"model": self.default_model, "messages": [], "stream": False},
+                timeout=5.0
+            )
+            return resp.status_code != 404
+        except Exception:
+            return False
+
+    def _messages_to_prompt(self, messages: list[dict], system: Optional[str] = None) -> str:
+        """Convert messages list to a single prompt string for /api/generate fallback."""
+        parts = []
+        if system:
+            parts.append(f"System: {system}\n")
+        for m in messages:
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            if role == "system":
+                parts.append(f"System: {content}")
+            elif role == "user":
+                parts.append(f"User: {content}")
+            elif role == "assistant":
+                parts.append(f"Assistant: {content}")
+        parts.append("Assistant:")
+        return "\n\n".join(parts)
+
     async def chat(
         self,
         messages: list[dict],
@@ -64,32 +93,59 @@ class OllamaLLM:
         system: Optional[str] = None,
     ) -> str:
         model = model or self.default_model
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": stream,
-            "options": {
-                "temperature": self.temperature,
-                "num_predict": self.max_tokens,
-            }
-        }
-        if system:
-            payload["system"] = system
 
+        # Try /api/chat first (modern Ollama)
         try:
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": self.temperature,
+                    "num_predict": self.max_tokens,
+                }
+            }
+            if system:
+                payload["system"] = system
+
             resp = await self._client.post(
                 f"{self.base_url}/api/chat",
                 json=payload,
                 timeout=120.0
             )
+            if resp.status_code == 404:
+                raise ValueError("api/chat not available")
             resp.raise_for_status()
-            data = resp.json()
-            return data["message"]["content"]
+            return resp.json()["message"]["content"]
         except httpx.TimeoutException:
             return "Fehler: Zeitüberschreitung beim LLM. Läuft Ollama?"
+        except ValueError:
+            pass
         except Exception as e:
-            logger.error(f"LLM error: {e}")
-            return f"Fehler: {e}"
+            if "404" not in str(e):
+                logger.error(f"LLM chat error: {e}")
+                return f"Fehler: {e}"
+
+        # Fallback: /api/generate (older Ollama versions)
+        try:
+            prompt = self._messages_to_prompt(messages, system)
+            resp = await self._client.post(
+                f"{self.base_url}/api/generate",
+                json={
+                    "model": model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"temperature": self.temperature, "num_predict": self.max_tokens}
+                },
+                timeout=120.0
+            )
+            resp.raise_for_status()
+            return resp.json().get("response", "")
+        except httpx.TimeoutException:
+            return "Fehler: Zeitüberschreitung. Läuft Ollama? (ollama serve)"
+        except Exception as e:
+            logger.error(f"LLM generate fallback error: {e}")
+            return f"Fehler: {e} — Starte Ollama: 'ollama serve'"
 
     async def chat_stream(
         self,
@@ -98,25 +154,25 @@ class OllamaLLM:
         system: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         model = model or self.default_model
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": True,
-            "options": {
-                "temperature": self.temperature,
-                "num_predict": self.max_tokens,
-            }
-        }
-        if system:
-            payload["system"] = system
 
+        # Try /api/chat stream first
         try:
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": True,
+                "options": {"temperature": self.temperature, "num_predict": self.max_tokens}
+            }
+            if system:
+                payload["system"] = system
+
+            used_chat = False
             async with self._client.stream(
-                "POST",
-                f"{self.base_url}/api/chat",
-                json=payload,
-                timeout=120.0
+                "POST", f"{self.base_url}/api/chat", json=payload, timeout=120.0
             ) as resp:
+                if resp.status_code == 404:
+                    raise ValueError("api/chat not available")
+                used_chat = True
                 async for line in resp.aiter_lines():
                     if line:
                         try:
@@ -129,8 +185,41 @@ class OllamaLLM:
                                 break
                         except json.JSONDecodeError:
                             pass
+            return
+        except ValueError:
+            pass  # fall through to /api/generate
         except Exception as e:
-            yield f"\n[Fehler: {e}]"
+            if "404" not in str(e):
+                yield f"\n[Fehler: {e}]"
+                return
+
+        # Fallback: /api/generate stream
+        try:
+            prompt = self._messages_to_prompt(messages, system)
+            async with self._client.stream(
+                "POST",
+                f"{self.base_url}/api/generate",
+                json={
+                    "model": model,
+                    "prompt": prompt,
+                    "stream": True,
+                    "options": {"temperature": self.temperature, "num_predict": self.max_tokens}
+                },
+                timeout=120.0
+            ) as resp:
+                async for line in resp.aiter_lines():
+                    if line:
+                        try:
+                            data = json.loads(line)
+                            token = data.get("response", "")
+                            if token:
+                                yield token
+                            if data.get("done"):
+                                break
+                        except json.JSONDecodeError:
+                            pass
+        except Exception as e:
+            yield f"\n[Fehler: {e}] — Starte Ollama mit: ollama serve"
 
     async def embed(self, text: str, model: str = "nomic-embed-text") -> list[float]:
         try:
