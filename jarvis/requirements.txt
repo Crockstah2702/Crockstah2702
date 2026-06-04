@@ -12,17 +12,36 @@ ollama>=0.1.8
 chromadb>=0.4.24
 sentence-transformers>=2.6.0
 
-# Tools
+# Tools - Web & Suche
 duckduckgo-search>=5.3.0
-psutil>=5.9.8
-sympy>=1.12
 requests>=2.31.0
 beautifulsoup4>=4.12.3
 lxml>=5.1.0
 
-# Browser-Automatisierung (für Account erstellen, Web-Aufgaben etc.)
+# Tools - System & Prozesse
+psutil>=5.9.8
+pyautogui>=0.9.54        # Maus, Tastatur, Bildschirmsteuerung
+pillow>=10.2.0           # Bilder, Screenshots
+
+# Tools - Mathe & Daten
+sympy>=1.12
+pandas>=2.2.0            # CSV, Excel lesen
+openpyxl>=3.1.2          # Excel .xlsx
+pdfplumber>=0.10.3       # PDF lesen
+
+# Tools - Netzwerk
+urllib3>=2.0.0
+
+# Tools - Medien
+pygame>=2.5.2
+
+# Tools - Hilfsmittel
+deep-translator>=1.11.4  # Text übersetzen (kein API Key nötig)
+qrcode[pil]>=7.4.2       # QR-Codes erstellen
+pyperclip>=1.8.2         # Zwischenablage
+
+# Browser-Automatisierung
 playwright>=1.42.0
-# Nach Installation einmalig: playwright install chromium
 
 # Voice - STT
 faster-whisper>=1.0.0
@@ -32,12 +51,9 @@ numpy>=1.26.0
 
 # Voice - TTS
 edge-tts>=6.1.10
-pygame>=2.5.2
 
 # Persistence
 aiosqlite>=0.20.0
 python-dotenv>=1.0.1
 pyyaml>=6.0.1
-
-# Jinja2 for templates
 jinja2>=3.1.3

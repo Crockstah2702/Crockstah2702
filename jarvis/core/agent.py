@@ -226,6 +226,69 @@ TOOL_SCHEMA = {
         "desc": "Todo als erledigt markieren",
         "params": {"todo_id": "int"}
     },
+
+    # ── Maus & Tastatur ──────────────────────────────
+    "mouse_click": {"desc": "Mausklick an Position (x,y)", "params": {"x": "int", "y": "int", "button": "str='left'"}},
+    "mouse_double_click": {"desc": "Doppelklick an Position", "params": {"x": "int", "y": "int"}},
+    "mouse_right_click": {"desc": "Rechtsklick an Position", "params": {"x": "int", "y": "int"}},
+    "mouse_move": {"desc": "Maus zu Position bewegen", "params": {"x": "int", "y": "int"}},
+    "mouse_drag": {"desc": "Drag & Drop", "params": {"from_x": "int", "from_y": "int", "to_x": "int", "to_y": "int"}},
+    "mouse_scroll": {"desc": "Maus scrollen", "params": {"amount": "int=3", "direction": "str='down'"}},
+    "type_text": {"desc": "Text via Tastatur eingeben (an aktuellem Cursor)", "params": {"text": "str"}},
+    "key_press": {"desc": "Tastenkombination drücken: 'ctrl+c', 'alt+tab', 'enter', 'win', 'f5'...", "params": {"keys": "str"}},
+    "get_mouse_position": {"desc": "Aktuelle Mausposition abrufen", "params": {}},
+    "get_screen_size": {"desc": "Bildschirmauflösung abrufen", "params": {}},
+    "find_on_screen": {"desc": "Bild auf Bildschirm suchen und Position zurückgeben", "params": {"image_path": "str"}},
+    "click_on_image": {"desc": "Bild auf Bildschirm suchen und darauf klicken", "params": {"image_path": "str"}},
+
+    # ── Medien & Audio ───────────────────────────────
+    "play_media": {"desc": "Audio/Video-Datei oder URL abspielen", "params": {"path_or_url": "str"}},
+    "stop_media": {"desc": "Aktuelle Wiedergabe stoppen", "params": {}},
+    "get_volume": {"desc": "Systemlautstärke abrufen", "params": {}},
+    "set_volume": {"desc": "Systemlautstärke setzen (0-100)", "params": {"level": "int"}},
+    "mute_volume": {"desc": "Ton stumm schalten", "params": {}},
+    "unmute_volume": {"desc": "Stummschaltung aufheben", "params": {}},
+    "list_media_files": {"desc": "Mediendateien in Verzeichnis auflisten", "params": {"directory": "str='~'"}},
+
+    # ── Dateien Erweitert ────────────────────────────
+    "read_pdf": {"desc": "PDF-Datei lesen und Text extrahieren", "params": {"path": "str", "pages": "str='all'"}},
+    "read_csv": {"desc": "CSV oder Excel-Datei lesen", "params": {"path": "str", "rows": "int=50"}},
+    "write_csv": {"desc": "Daten als CSV-Datei schreiben", "params": {"path": "str", "data": "list"}},
+    "zip_create": {"desc": "ZIP-Archiv aus Dateien erstellen", "params": {"files": "list", "output_path": "str"}},
+    "zip_extract": {"desc": "ZIP-Archiv entpacken", "params": {"zip_path": "str", "destination": "str=''"}},
+    "zip_list": {"desc": "Inhalt eines ZIP-Archivs anzeigen", "params": {"zip_path": "str"}},
+    "convert_image": {"desc": "Bild konvertieren (PNG→JPG etc.)", "params": {"input_path": "str", "output_path": "str"}},
+    "resize_image": {"desc": "Bildgröße ändern", "params": {"path": "str", "width": "int", "height": "int"}},
+    "get_file_info": {"desc": "Detaillierte Dateiinfos (Größe, Datum, Typ)", "params": {"path": "str"}},
+
+    # ── Netzwerk ─────────────────────────────────────
+    "http_get": {"desc": "HTTP GET-Anfrage an eine URL", "params": {"url": "str", "headers": "dict={}"}},
+    "http_post": {"desc": "HTTP POST-Anfrage", "params": {"url": "str", "json_data": "dict=None"}},
+    "ping_host": {"desc": "Host anpingen (Erreichbarkeit prüfen)", "params": {"host": "str"}},
+    "check_port": {"desc": "Prüfe ob ein Port offen ist", "params": {"host": "str", "port": "int"}},
+    "get_network_info": {"desc": "Netzwerk-Infos: lokale IP, gesendet/empfangen", "params": {}},
+    "get_public_ip": {"desc": "Öffentliche IP und Standort abrufen", "params": {}},
+    "dns_lookup": {"desc": "DNS-Abfrage für einen Hostnamen", "params": {"hostname": "str"}},
+
+    # ── Hilfsmittel ──────────────────────────────────
+    "set_timer": {"desc": "Timer setzen — ARIA erinnert nach X Minuten", "params": {"minutes": "float", "message": "str='Timer abgelaufen!'"}},
+    "cancel_timer": {"desc": "Timer abbrechen", "params": {"timer_id": "str=''"}},
+    "list_timers": {"desc": "Aktive Timer anzeigen", "params": {}},
+    "translate_text": {"desc": "Text in jede Sprache übersetzen (kein API Key)", "params": {"text": "str", "target_language": "str='de'", "source_language": "str='auto'"}},
+    "generate_password": {"desc": "Sicheres Passwort generieren", "params": {"length": "int=16", "special_chars": "bool=True"}},
+    "generate_qr": {"desc": "QR-Code aus Text/URL erstellen", "params": {"text": "str", "output_path": "str"}},
+    "encode_base64": {"desc": "Text als Base64 kodieren", "params": {"text": "str"}},
+    "decode_base64": {"desc": "Base64 Text dekodieren", "params": {"text": "str"}},
+    "hash_text": {"desc": "Hash berechnen (sha256, md5, sha512...)", "params": {"text": "str", "algorithm": "str='sha256'"}},
+    "get_date_time": {"desc": "Aktuelles Datum und Uhrzeit (lokal + UTC)", "params": {}},
+    "count_words": {"desc": "Wörter, Zeichen und Sätze zählen", "params": {"text": "str"}},
+    "kill_process": {"desc": "Prozess nach Name oder PID beenden", "params": {"name_or_pid": "str"}},
+
+    # ── Git ──────────────────────────────────────────
+    "git_status": {"desc": "Git-Status eines Repos anzeigen", "params": {"repo_path": "str='.'"}},
+    "git_log": {"desc": "Git-Commit-Historie anzeigen", "params": {"repo_path": "str='.'", "n": "int=10"}},
+    "git_commit": {"desc": "Git-Commit erstellen", "params": {"repo_path": "str", "message": "str"}},
+    "git_clone": {"desc": "Git-Repository klonen", "params": {"url": "str", "destination": "str=''"}},
 }
 
 

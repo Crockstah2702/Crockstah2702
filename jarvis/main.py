@@ -86,7 +86,7 @@ async def build_tool_registry(cfg: dict):
     from tools.web_search import web_search, web_fetch
     from tools.calculator import calculate, convert_units
     from tools.code_runner import run_python
-    from tools.file_ops import read_file, write_file, list_directory, search_files, create_directory
+    from tools.file_ops import read_file, write_file, list_directory, search_files, create_directory, delete_file
     from tools.system_info import get_system_info, get_top_processes
     from tools.system_advanced import (
         run_command, open_application, open_url_in_browser,
@@ -94,7 +94,6 @@ async def build_tool_registry(cfg: dict):
         list_running_apps, take_screenshot
     )
     from tools.notes import create_note, list_notes, read_note, add_todo, list_todos, complete_todo
-    from tools.file_ops import delete_file
     from tools.weather import get_weather
     from tools.email_tool import send_email, read_emails, setup_email
     from tools.browser_tool import (
@@ -103,13 +102,40 @@ async def build_tool_registry(cfg: dict):
     )
     from tools.multi_lang_runner import run_code, list_available_languages
 
+    # Neue Tools
+    from tools.mouse_tool import (
+        mouse_click, mouse_double_click, mouse_right_click, mouse_move,
+        mouse_drag, mouse_scroll, type_text, key_press,
+        get_mouse_position, get_screen_size, find_on_screen, click_on_image
+    )
+    from tools.media_tool import (
+        play_media, stop_media, get_volume, set_volume,
+        mute_volume, unmute_volume, list_media_files
+    )
+    from tools.file_advanced import (
+        read_pdf, read_csv, write_csv, zip_create, zip_extract, zip_list,
+        convert_image, resize_image, get_file_info
+    )
+    from tools.network_tool import (
+        http_get, http_post, ping_host, check_port,
+        get_network_info, get_public_ip, dns_lookup
+    )
+    from tools.utility_tool import (
+        set_timer, cancel_timer, list_timers,
+        translate_text, generate_password, encode_base64, decode_base64,
+        generate_qr, kill_process, git_status, git_log, git_commit, git_clone,
+        hash_text, get_date_time, count_words
+    )
+
     registry = ToolRegistry()
 
-    # Web
+    # ── Web ──────────────────────────────────────────────────────────
     registry.register(Tool("web_search", "Internet-Suche", web_search, {"query": "str", "max_results": "int=5"}))
     registry.register(Tool("web_fetch", "Webseite lesen", web_fetch, {"url": "str"}))
+    registry.register(Tool("http_get", "HTTP GET-Anfrage", http_get, {"url": "str", "headers": "dict={}"}))
+    registry.register(Tool("http_post", "HTTP POST-Anfrage", http_post, {"url": "str", "json_data": "dict=None", "data": "dict=None"}))
 
-    # Browser-Automatisierung
+    # ── Browser-Automatisierung ───────────────────────────────────────
     registry.register(Tool("browser_open", "URL im Browser öffnen", browser_open, {"url": "str"}))
     registry.register(Tool("browser_click", "Browser-Element klicken", browser_click, {"selector_or_text": "str"}))
     registry.register(Tool("browser_type", "Text in Browser tippen", browser_type, {"selector": "str", "text": "str"}))
@@ -119,42 +145,101 @@ async def build_tool_registry(cfg: dict):
     registry.register(Tool("browser_press_key", "Taste im Browser drücken", browser_press_key, {"key": "str"}))
     registry.register(Tool("browser_scroll", "Browser scrollen", browser_scroll, {"direction": "str='down'", "amount": "int=500"}))
 
-    # Mathe & Code
+    # ── Maus & Tastatur ───────────────────────────────────────────────
+    registry.register(Tool("mouse_click", "Mausklick an Position (x,y)", mouse_click, {"x": "int=None", "y": "int=None", "button": "str='left'"}))
+    registry.register(Tool("mouse_double_click", "Doppelklick an Position", mouse_double_click, {"x": "int", "y": "int"}))
+    registry.register(Tool("mouse_right_click", "Rechtsklick an Position", mouse_right_click, {"x": "int", "y": "int"}))
+    registry.register(Tool("mouse_move", "Maus bewegen", mouse_move, {"x": "int", "y": "int"}))
+    registry.register(Tool("mouse_drag", "Drag & Drop", mouse_drag, {"from_x": "int", "from_y": "int", "to_x": "int", "to_y": "int"}))
+    registry.register(Tool("mouse_scroll", "Maus scrollen", mouse_scroll, {"amount": "int=3", "direction": "str='down'"}))
+    registry.register(Tool("type_text", "Text via Tastatur tippen", type_text, {"text": "str"}))
+    registry.register(Tool("key_press", "Taste/Tastenkombination drücken (z.B. ctrl+c, alt+tab, enter)", key_press, {"keys": "str"}))
+    registry.register(Tool("get_mouse_position", "Aktuelle Mausposition abrufen", get_mouse_position, {}))
+    registry.register(Tool("get_screen_size", "Bildschirmauflösung abrufen", get_screen_size, {}))
+    registry.register(Tool("find_on_screen", "Bild auf Bildschirm suchen", find_on_screen, {"image_path": "str"}))
+    registry.register(Tool("click_on_image", "Auf Bild auf Bildschirm klicken", click_on_image, {"image_path": "str"}))
+
+    # ── Medien & Audio ────────────────────────────────────────────────
+    registry.register(Tool("play_media", "Audio/Video abspielen", play_media, {"path_or_url": "str"}))
+    registry.register(Tool("stop_media", "Wiedergabe stoppen", stop_media, {}))
+    registry.register(Tool("get_volume", "Systemlautstärke abrufen", get_volume, {}))
+    registry.register(Tool("set_volume", "Systemlautstärke setzen (0-100)", set_volume, {"level": "int"}))
+    registry.register(Tool("mute_volume", "Ton stumm schalten", mute_volume, {}))
+    registry.register(Tool("unmute_volume", "Stummschaltung aufheben", unmute_volume, {}))
+    registry.register(Tool("list_media_files", "Mediendateien auflisten", list_media_files, {"directory": "str='~'"}))
+
+    # ── Mathe & Code ──────────────────────────────────────────────────
     registry.register(Tool("calculate", "Mathematik", calculate, {"expression": "str"}))
     registry.register(Tool("convert_units", "Einheiten umrechnen", convert_units, {"value": "float", "from_unit": "str", "to_unit": "str"}))
     registry.register(Tool("run_python", "Python ausführen", run_python, {"code": "str"}))
-    registry.register(Tool("run_code", "Code in JEDER Sprache ausführen (Python/JS/Go/Rust/C++/Java...)", run_code, {"code": "str", "language": "str", "timeout": "int=30"}))
-    registry.register(Tool("list_languages", "Verfügbare Programmiersprachen anzeigen", list_available_languages, {}))
+    registry.register(Tool("run_code", "Code in JEDER Sprache (Python/JS/Go/Rust/C++/Java...)", run_code, {"code": "str", "language": "str", "timeout": "int=30"}))
+    registry.register(Tool("list_languages", "Installierte Programmiersprachen", list_available_languages, {}))
 
-    # System
-    registry.register(Tool("get_system_info", "Systeminfos", get_system_info, {}))
-    registry.register(Tool("get_top_processes", "Top-Prozesse", get_top_processes, {"n": "int=10"}))
-    registry.register(Tool("run_command", "Shell-Befehl", run_command, {"command": "str", "timeout": "int=30"}))
+    # ── System ────────────────────────────────────────────────────────
+    registry.register(Tool("get_system_info", "Systeminfos (CPU/RAM/Disk)", get_system_info, {}))
+    registry.register(Tool("get_top_processes", "Top-Prozesse nach CPU", get_top_processes, {"n": "int=10"}))
+    registry.register(Tool("run_command", "Shell/Terminal-Befehl", run_command, {"command": "str", "timeout": "int=30"}))
     registry.register(Tool("open_application", "App starten", open_application, {"app_name": "str"}))
     registry.register(Tool("open_url_in_browser", "URL im Browser", open_url_in_browser, {"url": "str"}))
     registry.register(Tool("get_clipboard", "Zwischenablage lesen", get_clipboard, {}))
     registry.register(Tool("set_clipboard", "Zwischenablage schreiben", set_clipboard, {"text": "str"}))
     registry.register(Tool("send_desktop_notification", "Desktop-Benachrichtigung", send_desktop_notification, {"title": "str", "message": "str"}))
-    registry.register(Tool("list_running_apps", "Laufende Apps", list_running_apps, {}))
-    registry.register(Tool("take_screenshot", "Desktop-Screenshot machen", take_screenshot, {"filename": "str='screenshot.png'"}))
+    registry.register(Tool("list_running_apps", "Laufende Apps auflisten", list_running_apps, {}))
+    registry.register(Tool("take_screenshot", "Desktop-Screenshot", take_screenshot, {"filename": "str='screenshot.png'"}))
+    registry.register(Tool("kill_process", "Prozess beenden", kill_process, {"name_or_pid": "str"}))
 
-    # Dateien (voller Zugriff)
+    # ── Dateien (voller Zugriff) ──────────────────────────────────────
     registry.register(Tool("read_file", "Datei lesen", read_file, {"path": "str"}))
-    registry.register(Tool("write_file", "Datei schreiben", write_file, {"path": "str", "content": "str", "append": "bool=False"}))
+    registry.register(Tool("write_file", "Datei schreiben/erstellen", write_file, {"path": "str", "content": "str", "append": "bool=False"}))
     registry.register(Tool("list_directory", "Verzeichnis anzeigen", list_directory, {"path": "str"}))
     registry.register(Tool("search_files", "Dateien suchen", search_files, {"query": "str", "directory": "str"}))
     registry.register(Tool("create_directory", "Ordner erstellen", create_directory, {"path": "str"}))
     registry.register(Tool("delete_file", "Datei/Ordner löschen", delete_file, {"path": "str"}))
+    registry.register(Tool("get_file_info", "Dateiinformationen", get_file_info, {"path": "str"}))
+    registry.register(Tool("read_pdf", "PDF-Datei lesen", read_pdf, {"path": "str", "pages": "str='all'"}))
+    registry.register(Tool("read_csv", "CSV/Excel-Datei lesen", read_csv, {"path": "str", "rows": "int=50"}))
+    registry.register(Tool("write_csv", "CSV-Datei schreiben", write_csv, {"path": "str", "data": "list", "headers": "list=None"}))
+    registry.register(Tool("zip_create", "ZIP-Archiv erstellen", zip_create, {"files": "list", "output_path": "str"}))
+    registry.register(Tool("zip_extract", "ZIP-Archiv entpacken", zip_extract, {"zip_path": "str", "destination": "str=''"}))
+    registry.register(Tool("zip_list", "ZIP-Inhalt anzeigen", zip_list, {"zip_path": "str"}))
+    registry.register(Tool("convert_image", "Bild konvertieren", convert_image, {"input_path": "str", "output_path": "str", "format": "str=''"}))
+    registry.register(Tool("resize_image", "Bildgröße ändern", resize_image, {"path": "str", "width": "int", "height": "int", "output": "str=''"}))
 
-    # E-Mail
+    # ── Netzwerk ──────────────────────────────────────────────────────
+    registry.register(Tool("ping_host", "Host anpingen", ping_host, {"host": "str", "count": "int=4"}))
+    registry.register(Tool("check_port", "Port prüfen ob offen", check_port, {"host": "str", "port": "int"}))
+    registry.register(Tool("get_network_info", "Netzwerk-Info (IP, DNS)", get_network_info, {}))
+    registry.register(Tool("get_public_ip", "Öffentliche IP + Standort", get_public_ip, {}))
+    registry.register(Tool("dns_lookup", "DNS-Abfrage", dns_lookup, {"hostname": "str"}))
+
+    # ── Hilfsmittel ───────────────────────────────────────────────────
+    registry.register(Tool("set_timer", "Timer setzen (Minuten)", set_timer, {"minutes": "float", "message": "str='Timer abgelaufen!'"}))
+    registry.register(Tool("cancel_timer", "Timer abbrechen", cancel_timer, {"timer_id": "str=''"}))
+    registry.register(Tool("list_timers", "Aktive Timer anzeigen", list_timers, {}))
+    registry.register(Tool("translate_text", "Text übersetzen", translate_text, {"text": "str", "target_language": "str='de'", "source_language": "str='auto'"}))
+    registry.register(Tool("generate_password", "Sicheres Passwort generieren", generate_password, {"length": "int=16", "special_chars": "bool=True"}))
+    registry.register(Tool("generate_qr", "QR-Code erstellen", generate_qr, {"text": "str", "output_path": "str='~/jarvis_files/qrcode.png'"}))
+    registry.register(Tool("encode_base64", "Text als Base64 kodieren", encode_base64, {"text": "str"}))
+    registry.register(Tool("decode_base64", "Base64 dekodieren", decode_base64, {"text": "str"}))
+    registry.register(Tool("hash_text", "Hash berechnen (md5/sha256/sha512)", hash_text, {"text": "str", "algorithm": "str='sha256'"}))
+    registry.register(Tool("get_date_time", "Aktuelles Datum und Uhrzeit", get_date_time, {}))
+    registry.register(Tool("count_words", "Wörter/Zeichen zählen", count_words, {"text": "str"}))
+
+    # ── Git ───────────────────────────────────────────────────────────
+    registry.register(Tool("git_status", "Git-Status anzeigen", git_status, {"repo_path": "str='.'"}))
+    registry.register(Tool("git_log", "Git-Commit-Historie", git_log, {"repo_path": "str='.'", "n": "int=10"}))
+    registry.register(Tool("git_commit", "Git-Commit erstellen", git_commit, {"repo_path": "str", "message": "str", "files": "list=None"}))
+    registry.register(Tool("git_clone", "Git-Repository klonen", git_clone, {"url": "str", "destination": "str=''"}))
+
+    # ── E-Mail ────────────────────────────────────────────────────────
     registry.register(Tool("setup_email", "E-Mail konfigurieren", setup_email, {"smtp_server": "str", "smtp_port": "int", "email_address": "str", "password": "str"}))
     registry.register(Tool("send_email", "E-Mail senden", send_email, {"to": "str", "subject": "str", "body": "str", "cc": "str=''"}))
     registry.register(Tool("read_emails", "E-Mails lesen", read_emails, {"folder": "str='INBOX'", "limit": "int=10"}))
 
-    # Wetter
+    # ── Wetter ────────────────────────────────────────────────────────
     registry.register(Tool("get_weather", "Wetter", get_weather, {"location": "str", "format": "str='detailed'"}))
 
-    # Notizen & Todos
+    # ── Notizen & Todos ───────────────────────────────────────────────
     registry.register(Tool("create_note", "Notiz erstellen", create_note, {"title": "str", "content": "str", "tags": "str=''"}))
     registry.register(Tool("list_notes", "Notizen auflisten", list_notes, {"search": "str=''"}))
     registry.register(Tool("read_note", "Notiz lesen", read_note, {"title": "str"}))
