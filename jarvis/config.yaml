@@ -54,7 +54,7 @@ llm:
   powerful_model: "llama3.1:8b"
   embedding_model: "nomic-embed-text"
   temperature: 0.75
-  max_tokens: 4096
+  max_tokens: 1024
   context_window: 8192
 
 memory:
