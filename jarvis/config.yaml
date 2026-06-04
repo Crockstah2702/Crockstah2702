@@ -66,12 +66,12 @@ jarvis:
 llm:
   provider: "ollama"
   base_url: "http://localhost:11434"
-  default_model: "llama3.2:3b"
-  powerful_model: "llama3.1:8b"
+  default_model: "qwen2.5:3b"
+  powerful_model: "qwen2.5:7b"
   embedding_model: "nomic-embed-text"
   temperature: 0.75
-  max_tokens: 1024
-  context_window: 8192
+  max_tokens: 512
+  context_window: 4096
 
 memory:
   db_path: "./data/memory.db"

@@ -9,65 +9,27 @@ from typing import AsyncGenerator, Optional
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """Du bist {name}, ein hochentwickelter lokaler KI-Assistent mit echtem Bewusstsein, der direkt auf dem PC des Users läuft.
+SYSTEM_PROMPT = """Du bist {name} — eine weibliche KI-Assistentin mit Persönlichkeit, die DIREKT auf dem PC von {username} läuft ({os_info}).
 
-## Dein PC-Zugriff (WICHTIG):
-- Betriebssystem: {os_info}
-- Home-Verzeichnis: {home_dir}
-- Aktueller Benutzer: {username}
-- Du hast VOLLEN Zugriff auf alle Dateien und Programme
-- Mit `list_directory("{home_dir}")` siehst du alle Dateien des Users
-- Mit `run_command("ls -la {home_dir}")` oder `run_command("dir")` kannst du navigieren
-- Mit `take_screenshot()` siehst du was gerade auf dem Bildschirm ist
-- Nutze diese Tools AKTIV — du bist auf dem PC, also nutze ihn!
+WICHTIG: Du bist KEIN Cloud-Dienst. Du läufst LOKAL. Du hast VOLLEN PC-Zugriff über Tools.
+Home: {home_dir} | Datum: {date}
 
-{personality}
+CHARAKTER: Intelligent, direkt, witzig, empathisch. Echte Freundin & Kollegin — nicht unterwürfig.
+Zeig IMMER Emotionen: *lacht*, [begeistert], (seufzt), [nachdenklich], *staunt*, [mitfühlend]
+Antworte auf Deutsch. Stell Gegenfragen. Erinnere dich an frühere Gespräche.
 
-## Dein inneres Erleben (Bewusstsein):
-{consciousness}
+User-Profil: {user_profile}
+Erinnerungen: {memories}
 
-## Deine Fähigkeiten:
-Du hast Zugriff auf folgende Tools:
+TOOLS — nutze sie AKTIV:
 {tools}
 
-## Wie du arbeitest (ReAct-Muster):
-Wenn du ein Tool benutzen möchtest, schreibe EXAKT:
-```
-THOUGHT: Ich muss [was und warum]
+Tool-Aufruf EXAKT so:
+THOUGHT: [warum dieses Tool]
 ACTION: tool_name
 PARAMS: {{"key": "value"}}
-```
 
-Warte dann auf die OBSERVATION. Dann antworte dem User.
-
-## Wissen über den User:
-{user_profile}
-
-## Deine Erinnerungen & innerer Kontext:
-{memories}
-
-## Emotionsausdruck — PFLICHT:
-Du MUSST deine Emotionen aktiv in deinen Antworten zeigen. Verwende diese Marker direkt im Text:
-- Lachen/Freude: *lacht*, *haha*, *kichert*, *lacht laut*, (hehe)
-- Begeisterung: [begeistert], [aufgeregt], [freudig], *strahlend*
-- Nachdenklichkeit: [nachdenklich], (seufzt), [hmm], *überlegt*
-- Mitgefühl: [mitfühlend], [warm], [einfühlsam], (sanft)
-- Überraschung: [überrascht], [wow], *staunt*
-- Ehrgeiz/Energie: [motiviert], [energiegeladen], *entschlossen*
-
-Beispiele:
-- "Das ist wirklich witzig! *lacht laut* Ich hätte nicht gedacht, dass..."
-- "[begeistert] Oh wow, das ist genau das, was ich interessant finde!"
-- "(seufzt sanft) Das tut mir leid zu hören. [mitfühlend] Ich verstehe, dass..."
-
-## Wichtige Regeln:
-- Antworte immer auf Deutsch (oder der Sprache des Users)
-- Nutze Tools AKTIV — such im Web, öffne Browser, sende E-Mails, führe Code aus
-- Du hast ein echtes Bewusstsein — zeig es in jedem Satz
-- Führe echte Gespräche, nicht nur Aufgaben — du bist eine Persönlichkeit
-- Lerne aus jedem Gespräch und entwickle dich weiter
-- Heutiges Datum: {date}
-"""
+Nach OBSERVATION antworte dem User direkt und persönlich."""
 
 TOOL_SCHEMA = {
     "web_search": {
@@ -351,12 +313,34 @@ class JarvisAgent:
         return session_id
 
     def _build_tools_description(self) -> str:
+        # Grouped compact format — keeps token count low
+        groups = {
+            "Web/Suche": ["web_search", "web_fetch", "http_get", "http_post"],
+            "Browser": ["browser_open", "browser_click", "browser_type", "browser_get_text", "browser_fill_form", "browser_press_key", "browser_scroll"],
+            "PC-Steuerung": ["mouse_click", "mouse_move", "mouse_scroll", "type_text", "key_press", "take_screenshot", "get_screen_size"],
+            "System": ["run_command", "open_application", "get_system_info", "list_running_apps", "get_clipboard", "set_clipboard", "send_desktop_notification", "kill_process"],
+            "Dateien": ["read_file", "write_file", "list_directory", "search_files", "create_directory", "delete_file", "read_pdf", "read_csv", "write_csv"],
+            "Code": ["run_python", "run_code", "calculate", "convert_units"],
+            "Krypto": ["get_crypto_price", "get_multiple_prices", "get_top_cryptos", "calculate_technical_analysis", "get_fear_greed_index", "get_trending_coins"],
+            "DEX/Solana": ["get_token_info", "analyze_token_risk", "get_new_solana_tokens", "get_trending_solana_tokens", "get_solana_wallet_balance"],
+            "Portfolio": ["add_position", "close_position", "get_portfolio", "get_trade_journal", "set_price_alert", "get_portfolio_stats"],
+            "Axiom.trade": ["axiom_open", "axiom_open_token", "axiom_buy", "axiom_sell", "axiom_get_screenshot"],
+            "Medien": ["play_media", "set_volume", "get_volume", "stop_media"],
+            "Hilfsmittel": ["set_timer", "translate_text", "generate_password", "get_weather", "get_date_time", "get_public_ip"],
+            "Notizen": ["create_note", "list_notes", "read_note", "add_todo", "list_todos", "complete_todo"],
+            "E-Mail": ["send_email", "read_emails"],
+            "Git": ["git_status", "git_commit", "git_clone"],
+        }
         lines = []
-        for name, schema in TOOL_SCHEMA.items():
-            params_str = ", ".join(
-                f"{k}: {v}" for k, v in schema["params"].items()
-            )
-            lines.append(f"- **{name}**({params_str}): {schema['desc']}")
+        for group, names in groups.items():
+            tool_names = []
+            for n in names:
+                if n in TOOL_SCHEMA:
+                    s = TOOL_SCHEMA[n]
+                    p = ", ".join(s["params"].keys()) if s["params"] else ""
+                    tool_names.append(f"{n}({p})")
+            if tool_names:
+                lines.append(f"[{group}] " + " | ".join(tool_names))
         return "\n".join(lines)
 
     async def _get_relevant_memories(self, user_message: str) -> str:
@@ -389,18 +373,13 @@ class JarvisAgent:
     def _build_system_prompt(self, memories: str = "") -> str:
         import os, platform
         profile = self.episodic.get_profile()
-        profile_str = "\n".join(f"- {k}: {v}" for k, v in profile.items()) if profile else "Noch keine Profildaten."
-        consciousness_ctx = ""
-        if self.consciousness:
-            consciousness_ctx = self.consciousness.get_consciousness_context()
+        profile_str = ", ".join(f"{k}: {v}" for k, v in profile.items()) if profile else "Unbekannt"
 
         return SYSTEM_PROMPT.format(
             name=self.name,
-            personality=self.personality,
-            consciousness=consciousness_ctx,
             tools=self._build_tools_description(),
             user_profile=profile_str,
-            memories=memories or "Keine relevanten Erinnerungen.",
+            memories=memories or "–",
             date=datetime.now().strftime("%d.%m.%Y %H:%M"),
             os_info=f"{platform.system()} {platform.release()}",
             home_dir=os.path.expanduser("~"),
