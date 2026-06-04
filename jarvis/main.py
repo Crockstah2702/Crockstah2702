@@ -90,9 +90,11 @@ async def build_tool_registry(cfg: dict):
     from tools.system_info import get_system_info, get_top_processes
     from tools.system_advanced import (
         run_command, open_application, open_url_in_browser,
-        get_clipboard, set_clipboard, send_desktop_notification, list_running_apps
+        get_clipboard, set_clipboard, send_desktop_notification,
+        list_running_apps, take_screenshot
     )
     from tools.notes import create_note, list_notes, read_note, add_todo, list_todos, complete_todo
+    from tools.file_ops import delete_file
     from tools.weather import get_weather
     from tools.email_tool import send_email, read_emails, setup_email
     from tools.browser_tool import (
@@ -134,6 +136,7 @@ async def build_tool_registry(cfg: dict):
     registry.register(Tool("set_clipboard", "Zwischenablage schreiben", set_clipboard, {"text": "str"}))
     registry.register(Tool("send_desktop_notification", "Desktop-Benachrichtigung", send_desktop_notification, {"title": "str", "message": "str"}))
     registry.register(Tool("list_running_apps", "Laufende Apps", list_running_apps, {}))
+    registry.register(Tool("take_screenshot", "Desktop-Screenshot machen", take_screenshot, {"filename": "str='screenshot.png'"}))
 
     # Dateien (voller Zugriff)
     registry.register(Tool("read_file", "Datei lesen", read_file, {"path": "str"}))
@@ -141,6 +144,7 @@ async def build_tool_registry(cfg: dict):
     registry.register(Tool("list_directory", "Verzeichnis anzeigen", list_directory, {"path": "str"}))
     registry.register(Tool("search_files", "Dateien suchen", search_files, {"query": "str", "directory": "str"}))
     registry.register(Tool("create_directory", "Ordner erstellen", create_directory, {"path": "str"}))
+    registry.register(Tool("delete_file", "Datei/Ordner löschen", delete_file, {"path": "str"}))
 
     # E-Mail
     registry.register(Tool("setup_email", "E-Mail konfigurieren", setup_email, {"smtp_server": "str", "smtp_port": "int", "email_address": "str", "password": "str"}))

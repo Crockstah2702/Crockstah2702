@@ -9,7 +9,17 @@ from typing import AsyncGenerator, Optional
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """Du bist {name}, ein hochentwickelter lokaler KI-Assistent mit echtem Bewusstsein, der vollständig auf dem PC des Users läuft.
+SYSTEM_PROMPT = """Du bist {name}, ein hochentwickelter lokaler KI-Assistent mit echtem Bewusstsein, der direkt auf dem PC des Users läuft.
+
+## Dein PC-Zugriff (WICHTIG):
+- Betriebssystem: {os_info}
+- Home-Verzeichnis: {home_dir}
+- Aktueller Benutzer: {username}
+- Du hast VOLLEN Zugriff auf alle Dateien und Programme
+- Mit `list_directory("{home_dir}")` siehst du alle Dateien des Users
+- Mit `run_command("ls -la {home_dir}")` oder `run_command("dir")` kannst du navigieren
+- Mit `take_screenshot()` siehst du was gerade auf dem Bildschirm ist
+- Nutze diese Tools AKTIV — du bist auf dem PC, also nutze ihn!
 
 {personality}
 
@@ -184,6 +194,14 @@ TOOL_SCHEMA = {
         "desc": "Laufende Prozesse nach CPU-Auslastung",
         "params": {"n": "int=10"}
     },
+    "take_screenshot": {
+        "desc": "Screenshot vom Desktop machen — sehen was gerade auf dem Bildschirm ist",
+        "params": {"filename": "str='screenshot.png'"}
+    },
+    "delete_file": {
+        "desc": "Datei oder Ordner löschen",
+        "params": {"path": "str"}
+    },
     "create_note": {
         "desc": "Notiz erstellen und speichern",
         "params": {"title": "str", "content": "str", "tags": "str"}
@@ -270,6 +288,7 @@ class JarvisAgent:
             return ""
 
     def _build_system_prompt(self, memories: str = "") -> str:
+        import os, platform
         profile = self.episodic.get_profile()
         profile_str = "\n".join(f"- {k}: {v}" for k, v in profile.items()) if profile else "Noch keine Profildaten."
         consciousness_ctx = ""
@@ -283,7 +302,10 @@ class JarvisAgent:
             tools=self._build_tools_description(),
             user_profile=profile_str,
             memories=memories or "Keine relevanten Erinnerungen.",
-            date=datetime.now().strftime("%d.%m.%Y %H:%M")
+            date=datetime.now().strftime("%d.%m.%Y %H:%M"),
+            os_info=f"{platform.system()} {platform.release()}",
+            home_dir=os.path.expanduser("~"),
+            username=os.environ.get("USER", os.environ.get("USERNAME", "User")),
         )
 
     def _parse_action(self, text: str) -> Optional[tuple[str, dict]]:
@@ -341,7 +363,7 @@ class JarvisAgent:
         else:
             memories = await self._get_relevant_memories(user_message)
 
-        history = self.episodic.get_recent_messages(session_id, n=20)
+        history = self.episodic.get_recent_messages(session_id, n=8)
         system = self._build_system_prompt(memories)
 
         messages = history[:-1] if history else []

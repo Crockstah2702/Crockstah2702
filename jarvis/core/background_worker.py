@@ -163,6 +163,19 @@ class BackgroundWorker:
     def setup_default_tasks(self):
         defaults = [
             {
+                "name": "PC-Kennenlernen",
+                "description": "Beim Start: PC-Infos sammeln und im Gedächtnis speichern",
+                "schedule": "on_startup",
+                "command": (
+                    "Führe folgende Befehle aus um den PC kennenzulernen, "
+                    "und speichere die wichtigsten Infos als Fakten:\n"
+                    "1. get_system_info() — OS, CPU, RAM, Festplatte\n"
+                    "2. list_directory('~') — Was liegt im Home-Verzeichnis?\n"
+                    "3. list_running_apps() — Welche Apps laufen?\n"
+                    "Merke dir diese Infos für zukünftige Gespräche."
+                )
+            },
+            {
                 "name": "Systemüberwachung",
                 "description": "Prüfe CPU/RAM alle 30min, warn bei hoher Auslastung",
                 "schedule": "every_30m",
