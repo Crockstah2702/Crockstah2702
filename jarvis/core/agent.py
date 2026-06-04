@@ -289,6 +289,42 @@ TOOL_SCHEMA = {
     "git_log": {"desc": "Git-Commit-Historie anzeigen", "params": {"repo_path": "str='.'", "n": "int=10"}},
     "git_commit": {"desc": "Git-Commit erstellen", "params": {"repo_path": "str", "message": "str"}},
     "git_clone": {"desc": "Git-Repository klonen", "params": {"url": "str", "destination": "str=''"}},
+
+    # ── Krypto-Preise & Marktdaten ───────────────────
+    "get_crypto_price": {"desc": "Krypto-Preis abrufen: BTC, ETH, SOL, WIF, BONK usw.", "params": {"symbol": "str", "currency": "str='usd'"}},
+    "get_multiple_prices": {"desc": "Mehrere Krypto-Preise auf einmal (komma-getrennt)", "params": {"symbols": "str"}},
+    "get_top_cryptos": {"desc": "Top N Kryptowährungen nach Market Cap", "params": {"n": "int=20"}},
+    "get_price_history": {"desc": "Preisverlauf der letzten N Tage mit ASCII-Chart", "params": {"symbol": "str", "days": "int=7"}},
+    "get_trending_coins": {"desc": "Trending Coins auf CoinGecko (letzte 24h)", "params": {}},
+    "calculate_technical_analysis": {"desc": "RSI, MACD, Moving Averages (MA7/20/50), Volatilität", "params": {"symbol": "str", "days": "int=14"}},
+    "get_fear_greed_index": {"desc": "Crypto Fear & Greed Index (0=Extreme Fear, 100=Extreme Greed)", "params": {}},
+
+    # ── DEX / Solana ─────────────────────────────────
+    "get_token_info": {"desc": "Token-Info von DexScreener: Preis, Liquidität, Volume, Risiko, Chart-Link", "params": {"address_or_symbol": "str"}},
+    "search_dex_pairs": {"desc": "DEX Trading-Pairs auf DexScreener suchen", "params": {"query": "str", "limit": "int=5"}},
+    "get_new_solana_tokens": {"desc": "Neu gelistete Solana Tokens (frische Launches)", "params": {"limit": "int=10"}},
+    "get_solana_wallet_balance": {"desc": "Solana Wallet-Balance: SOL + alle Token-Holdings", "params": {"wallet_address": "str"}},
+    "analyze_token_risk": {"desc": "Token Rug-Check: Liquidität, Volumen, Buy/Sell-Ratio, Score", "params": {"address": "str"}},
+    "get_trending_solana_tokens": {"desc": "Trending Solana Tokens nach 24h-Volumen sortiert", "params": {}},
+
+    # ── Portfolio-Tracking ───────────────────────────
+    "add_position": {"desc": "Kauf-Position ins Portfolio eintragen", "params": {"symbol": "str", "amount": "float", "buy_price": "float", "notes": "str=''", "token_address": "str=''"}},
+    "close_position": {"desc": "Position schließen und P&L (Gewinn/Verlust) berechnen", "params": {"position_id": "int", "sell_price": "float", "notes": "str=''"}},
+    "get_portfolio": {"desc": "Gesamtes Portfolio mit aktuellem P&L anzeigen", "params": {"refresh_prices": "bool=True"}},
+    "get_trade_journal": {"desc": "Komplettes Trade-Journal mit allen Käufen & Verkäufen", "params": {"limit": "int=20"}},
+    "set_price_alert": {"desc": "Preis-Alert setzen — ARIA benachrichtigt wenn Kursziel erreicht", "params": {"symbol": "str", "target_price": "float", "direction": "str='above'"}},
+    "check_price_alerts": {"desc": "Aktive Preis-Alerts überprüfen und ausgelöste melden", "params": {}},
+    "get_portfolio_stats": {"desc": "Portfolio-Statistiken: Win-Rate, bester/schlechtester Trade", "params": {}},
+
+    # ── Axiom.trade DEX-Trading ──────────────────────
+    "axiom_open": {"desc": "Axiom.trade im Browser öffnen (Solana DEX)", "params": {}},
+    "axiom_search_token": {"desc": "Token auf Axiom.trade suchen", "params": {"query": "str"}},
+    "axiom_open_token": {"desc": "Token direkt auf Axiom öffnen (per Mint-Adresse)", "params": {"token_address": "str"}},
+    "axiom_buy": {"desc": "Token auf Axiom kaufen — Wallet-Bestätigung im Browser nötig!", "params": {"token_address": "str", "amount_sol": "float"}},
+    "axiom_buy_confirmed": {"desc": "Kauf bestätigen (für Beträge über 1 SOL)", "params": {"token_address": "str", "amount_sol": "float"}},
+    "axiom_sell": {"desc": "Token auf Axiom verkaufen: percentage=25/50/75/100", "params": {"token_address": "str", "percentage": "float=100"}},
+    "axiom_get_screenshot": {"desc": "Screenshot der aktuellen Axiom.trade Seite", "params": {}},
+    "axiom_close": {"desc": "Axiom-Browser schließen", "params": {}},
 }
 
 

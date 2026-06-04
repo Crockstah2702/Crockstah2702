@@ -127,6 +127,26 @@ async def build_tool_registry(cfg: dict):
         hash_text, get_date_time, count_words
     )
 
+    # Trading Tools
+    from tools.crypto_tool import (
+        get_crypto_price, get_multiple_prices, get_top_cryptos,
+        get_price_history, get_trending_coins, calculate_technical_analysis,
+        get_fear_greed_index
+    )
+    from tools.dex_tool import (
+        get_token_info, search_dex_pairs, get_new_solana_tokens,
+        get_solana_wallet_balance, analyze_token_risk, get_trending_solana_tokens
+    )
+    from tools.portfolio_tool import (
+        add_position, close_position, get_portfolio, get_trade_journal,
+        set_price_alert, check_price_alerts, get_portfolio_stats
+    )
+    from tools.axiom_tool import (
+        axiom_open, axiom_search_token, axiom_open_token,
+        axiom_buy, axiom_buy_confirmed, axiom_sell,
+        axiom_get_screenshot, axiom_close
+    )
+
     registry = ToolRegistry()
 
     # ── Web ──────────────────────────────────────────────────────────
@@ -246,6 +266,42 @@ async def build_tool_registry(cfg: dict):
     registry.register(Tool("add_todo", "Todo hinzufügen", add_todo, {"task": "str", "priority": "str='normal'"}))
     registry.register(Tool("list_todos", "Todos anzeigen", list_todos, {"show_done": "bool=False"}))
     registry.register(Tool("complete_todo", "Todo abhaken", complete_todo, {"todo_id": "int"}))
+
+    # ── Krypto & Trading ─────────────────────────────────────────────
+    registry.register(Tool("get_crypto_price", "Krypto-Preis abrufen (BTC, ETH, SOL...)", get_crypto_price, {"symbol": "str", "currency": "str='usd'"}))
+    registry.register(Tool("get_multiple_prices", "Mehrere Krypto-Preise auf einmal", get_multiple_prices, {"symbols": "str"}))
+    registry.register(Tool("get_top_cryptos", "Top Kryptos nach Market Cap", get_top_cryptos, {"n": "int=20"}))
+    registry.register(Tool("get_price_history", "Preisverlauf (Chart) der letzten N Tage", get_price_history, {"symbol": "str", "days": "int=7"}))
+    registry.register(Tool("get_trending_coins", "Trending Coins auf CoinGecko", get_trending_coins, {}))
+    registry.register(Tool("calculate_technical_analysis", "RSI, MACD, Moving Averages berechnen", calculate_technical_analysis, {"symbol": "str", "days": "int=14"}))
+    registry.register(Tool("get_fear_greed_index", "Crypto Fear & Greed Index", get_fear_greed_index, {}))
+
+    # ── DEX / Solana ──────────────────────────────────────────────────
+    registry.register(Tool("get_token_info", "Token-Info von DexScreener (Preis, Liquidity, Volume)", get_token_info, {"address_or_symbol": "str"}))
+    registry.register(Tool("search_dex_pairs", "DEX Trading-Pairs suchen", search_dex_pairs, {"query": "str", "limit": "int=5"}))
+    registry.register(Tool("get_new_solana_tokens", "Neue Solana Tokens (frisch gelistet)", get_new_solana_tokens, {"limit": "int=10"}))
+    registry.register(Tool("get_solana_wallet_balance", "Solana Wallet-Balance (SOL + Token)", get_solana_wallet_balance, {"wallet_address": "str"}))
+    registry.register(Tool("analyze_token_risk", "Token Risiko-Analyse (Rug-Check)", analyze_token_risk, {"address": "str"}))
+    registry.register(Tool("get_trending_solana_tokens", "Trending Solana Tokens nach Volumen", get_trending_solana_tokens, {}))
+
+    # ── Portfolio ─────────────────────────────────────────────────────
+    registry.register(Tool("add_position", "Kauf-Position ins Portfolio eintragen", add_position, {"symbol": "str", "amount": "float", "buy_price": "float", "notes": "str=''", "token_address": "str=''"}))
+    registry.register(Tool("close_position", "Position schließen & P&L berechnen", close_position, {"position_id": "int", "sell_price": "float", "notes": "str=''"}))
+    registry.register(Tool("get_portfolio", "Portfolio mit aktuellem P&L anzeigen", get_portfolio, {"refresh_prices": "bool=True"}))
+    registry.register(Tool("get_trade_journal", "Trade-Journal anzeigen", get_trade_journal, {"limit": "int=20"}))
+    registry.register(Tool("set_price_alert", "Preis-Alert setzen (Benachrichtigung bei Kursziel)", set_price_alert, {"symbol": "str", "target_price": "float", "direction": "str='above'"}))
+    registry.register(Tool("check_price_alerts", "Aktive Preis-Alerts prüfen", check_price_alerts, {}))
+    registry.register(Tool("get_portfolio_stats", "Portfolio-Statistiken (Win-Rate, bester Trade)", get_portfolio_stats, {}))
+
+    # ── Axiom.trade (Solana DEX-Trading) ─────────────────────────────
+    registry.register(Tool("axiom_open", "Axiom.trade im Browser öffnen", axiom_open, {}))
+    registry.register(Tool("axiom_search_token", "Token auf Axiom.trade suchen", axiom_search_token, {"query": "str"}))
+    registry.register(Tool("axiom_open_token", "Token direkt auf Axiom öffnen (Mint-Adresse)", axiom_open_token, {"token_address": "str"}))
+    registry.register(Tool("axiom_buy", "Token auf Axiom kaufen (Wallet-Bestätigung nötig)", axiom_buy, {"token_address": "str", "amount_sol": "float"}))
+    registry.register(Tool("axiom_buy_confirmed", "Kauf bestätigen (für Beträge >1 SOL)", axiom_buy_confirmed, {"token_address": "str", "amount_sol": "float"}))
+    registry.register(Tool("axiom_sell", "Token auf Axiom verkaufen (25/50/75/100%)", axiom_sell, {"token_address": "str", "percentage": "float=100"}))
+    registry.register(Tool("axiom_get_screenshot", "Screenshot der aktuellen Axiom-Seite", axiom_get_screenshot, {}))
+    registry.register(Tool("axiom_close", "Axiom-Browser schließen", axiom_close, {}))
 
     return registry
 
