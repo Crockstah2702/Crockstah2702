@@ -20,6 +20,10 @@ requests>=2.31.0
 beautifulsoup4>=4.12.3
 lxml>=5.1.0
 
+# Browser-Automatisierung (für Account erstellen, Web-Aufgaben etc.)
+playwright>=1.42.0
+# Nach Installation einmalig: playwright install chromium
+
 # Voice - STT
 faster-whisper>=1.0.0
 sounddevice>=0.4.6

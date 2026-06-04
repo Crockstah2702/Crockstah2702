@@ -7,33 +7,22 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_BASES = [
-    os.path.expanduser("~/Documents"),
-    os.path.expanduser("~/Desktop"),
-    os.path.expanduser("~/Downloads"),
-    "/tmp/jarvis",
-    os.path.expanduser("~/jarvis_files"),
+# Vollzugriff auf das gesamte Dateisystem (wie KITT / Jarvis)
+# Nur system-kritische Pfade werden blockiert
+BLOCKED_PATHS = [
+    "/proc", "/sys", "/dev",
+    "C:\\Windows\\System32",
 ]
 
 
 def _safe_path(path: str) -> Optional[Path]:
-    """Validate that path is within allowed directories."""
+    """Allow full filesystem access, block only critical system paths."""
     expanded = Path(os.path.expanduser(path)).resolve()
-    for base in ALLOWED_BASES:
-        base_path = Path(base).resolve()
-        try:
-            expanded.relative_to(base_path)
-            return expanded
-        except ValueError:
-            continue
-    # Also allow relative paths within jarvis data dir
-    jarvis_data = Path("./data").resolve()
-    try:
-        expanded.relative_to(jarvis_data)
-        return expanded
-    except ValueError:
-        pass
-    return None
+    path_str = str(expanded).lower()
+    for blocked in BLOCKED_PATHS:
+        if path_str.startswith(blocked.lower()):
+            return None
+    return expanded
 
 
 def read_file(path: str) -> str:

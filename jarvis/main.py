@@ -86,54 +86,78 @@ async def build_tool_registry(cfg: dict):
     from tools.web_search import web_search, web_fetch
     from tools.calculator import calculate, convert_units
     from tools.code_runner import run_python
-    from tools.file_ops import (
-        read_file, write_file, list_directory,
-        search_files, create_directory
-    )
+    from tools.file_ops import read_file, write_file, list_directory, search_files, create_directory
     from tools.system_info import get_system_info, get_top_processes
-    from tools.notes import (
-        create_note, list_notes, read_note,
-        add_todo, list_todos, complete_todo
+    from tools.system_advanced import (
+        run_command, open_application, open_url_in_browser,
+        get_clipboard, set_clipboard, send_desktop_notification, list_running_apps
     )
+    from tools.notes import create_note, list_notes, read_note, add_todo, list_todos, complete_todo
     from tools.weather import get_weather
+    from tools.email_tool import send_email, read_emails, setup_email
+    from tools.browser_tool import (
+        browser_open, browser_click, browser_type, browser_get_text,
+        browser_screenshot, browser_fill_form, browser_press_key, browser_scroll
+    )
+    from tools.multi_lang_runner import run_code, list_available_languages
 
     registry = ToolRegistry()
 
-    registry.register(Tool("web_search", "Suche im Internet", web_search,
-                            {"query": "str", "max_results": "int=5"}))
-    registry.register(Tool("web_fetch", "Webseite abrufen", web_fetch,
-                            {"url": "str"}))
-    registry.register(Tool("calculate", "Mathematik berechnen", calculate,
-                            {"expression": "str"}))
-    registry.register(Tool("convert_units", "Einheiten umrechnen", convert_units,
-                            {"value": "float", "from_unit": "str", "to_unit": "str"}))
-    registry.register(Tool("run_python", "Python-Code ausführen", run_python,
-                            {"code": "str"}))
-    registry.register(Tool("get_weather", "Wetter abrufen", get_weather,
-                            {"location": "str", "format": "str='detailed'"}))
-    registry.register(Tool("read_file", "Datei lesen", read_file, {"path": "str"}))
-    registry.register(Tool("write_file", "Datei schreiben", write_file,
-                            {"path": "str", "content": "str", "append": "bool=False"}))
-    registry.register(Tool("list_directory", "Verzeichnis anzeigen", list_directory,
-                            {"path": "str='~/jarvis_files'"}))
-    registry.register(Tool("search_files", "Dateien suchen", search_files,
-                            {"query": "str", "directory": "str"}))
-    registry.register(Tool("create_directory", "Verzeichnis erstellen", create_directory,
-                            {"path": "str"}))
+    # Web
+    registry.register(Tool("web_search", "Internet-Suche", web_search, {"query": "str", "max_results": "int=5"}))
+    registry.register(Tool("web_fetch", "Webseite lesen", web_fetch, {"url": "str"}))
+
+    # Browser-Automatisierung
+    registry.register(Tool("browser_open", "URL im Browser öffnen", browser_open, {"url": "str"}))
+    registry.register(Tool("browser_click", "Browser-Element klicken", browser_click, {"selector_or_text": "str"}))
+    registry.register(Tool("browser_type", "Text in Browser tippen", browser_type, {"selector": "str", "text": "str"}))
+    registry.register(Tool("browser_get_text", "Browser-Seitentext lesen", browser_get_text, {}))
+    registry.register(Tool("browser_screenshot", "Browser-Screenshot", browser_screenshot, {"filename": "str='screenshot.png'"}))
+    registry.register(Tool("browser_fill_form", "Formular ausfüllen", browser_fill_form, {"fields": "dict"}))
+    registry.register(Tool("browser_press_key", "Taste im Browser drücken", browser_press_key, {"key": "str"}))
+    registry.register(Tool("browser_scroll", "Browser scrollen", browser_scroll, {"direction": "str='down'", "amount": "int=500"}))
+
+    # Mathe & Code
+    registry.register(Tool("calculate", "Mathematik", calculate, {"expression": "str"}))
+    registry.register(Tool("convert_units", "Einheiten umrechnen", convert_units, {"value": "float", "from_unit": "str", "to_unit": "str"}))
+    registry.register(Tool("run_python", "Python ausführen", run_python, {"code": "str"}))
+    registry.register(Tool("run_code", "Code in JEDER Sprache ausführen (Python/JS/Go/Rust/C++/Java...)", run_code, {"code": "str", "language": "str", "timeout": "int=30"}))
+    registry.register(Tool("list_languages", "Verfügbare Programmiersprachen anzeigen", list_available_languages, {}))
+
+    # System
     registry.register(Tool("get_system_info", "Systeminfos", get_system_info, {}))
-    registry.register(Tool("get_top_processes", "Top-Prozesse", get_top_processes,
-                            {"n": "int=10"}))
-    registry.register(Tool("create_note", "Notiz erstellen", create_note,
-                            {"title": "str", "content": "str", "tags": "str=''"}))
-    registry.register(Tool("list_notes", "Notizen auflisten", list_notes,
-                            {"search": "str=''"}))
+    registry.register(Tool("get_top_processes", "Top-Prozesse", get_top_processes, {"n": "int=10"}))
+    registry.register(Tool("run_command", "Shell-Befehl", run_command, {"command": "str", "timeout": "int=30"}))
+    registry.register(Tool("open_application", "App starten", open_application, {"app_name": "str"}))
+    registry.register(Tool("open_url_in_browser", "URL im Browser", open_url_in_browser, {"url": "str"}))
+    registry.register(Tool("get_clipboard", "Zwischenablage lesen", get_clipboard, {}))
+    registry.register(Tool("set_clipboard", "Zwischenablage schreiben", set_clipboard, {"text": "str"}))
+    registry.register(Tool("send_desktop_notification", "Desktop-Benachrichtigung", send_desktop_notification, {"title": "str", "message": "str"}))
+    registry.register(Tool("list_running_apps", "Laufende Apps", list_running_apps, {}))
+
+    # Dateien (voller Zugriff)
+    registry.register(Tool("read_file", "Datei lesen", read_file, {"path": "str"}))
+    registry.register(Tool("write_file", "Datei schreiben", write_file, {"path": "str", "content": "str", "append": "bool=False"}))
+    registry.register(Tool("list_directory", "Verzeichnis anzeigen", list_directory, {"path": "str"}))
+    registry.register(Tool("search_files", "Dateien suchen", search_files, {"query": "str", "directory": "str"}))
+    registry.register(Tool("create_directory", "Ordner erstellen", create_directory, {"path": "str"}))
+
+    # E-Mail
+    registry.register(Tool("setup_email", "E-Mail konfigurieren", setup_email, {"smtp_server": "str", "smtp_port": "int", "email_address": "str", "password": "str"}))
+    registry.register(Tool("send_email", "E-Mail senden", send_email, {"to": "str", "subject": "str", "body": "str", "cc": "str=''"}))
+    registry.register(Tool("read_emails", "E-Mails lesen", read_emails, {"folder": "str='INBOX'", "limit": "int=10"}))
+
+    # Wetter
+    registry.register(Tool("get_weather", "Wetter", get_weather, {"location": "str", "format": "str='detailed'"}))
+
+    # Notizen & Todos
+    registry.register(Tool("create_note", "Notiz erstellen", create_note, {"title": "str", "content": "str", "tags": "str=''"}))
+    registry.register(Tool("list_notes", "Notizen auflisten", list_notes, {"search": "str=''"}))
     registry.register(Tool("read_note", "Notiz lesen", read_note, {"title": "str"}))
-    registry.register(Tool("add_todo", "Todo hinzufügen", add_todo,
-                            {"task": "str", "priority": "str='normal'"}))
-    registry.register(Tool("list_todos", "Todos auflisten", list_todos,
-                            {"show_done": "bool=False"}))
-    registry.register(Tool("complete_todo", "Todo abhaken", complete_todo,
-                            {"todo_id": "int"}))
+    registry.register(Tool("add_todo", "Todo hinzufügen", add_todo, {"task": "str", "priority": "str='normal'"}))
+    registry.register(Tool("list_todos", "Todos anzeigen", list_todos, {"show_done": "bool=False"}))
+    registry.register(Tool("complete_todo", "Todo abhaken", complete_todo, {"todo_id": "int"}))
+
     return registry
 
 
@@ -184,6 +208,11 @@ async def main():
     registry = await build_tool_registry(cfg)
     logger.info(f"{len(registry._tools)} Tools registriert")
 
+    # Initialize consciousness
+    from core.consciousness import ConsciousnessSystem
+    consciousness = ConsciousnessSystem(llm)
+    logger.info("Bewusstsein initialisiert")
+
     # Initialize agent
     from core.agent import JarvisAgent
     agent = JarvisAgent(
@@ -192,10 +221,17 @@ async def main():
         episodic_memory=episodic,
         vector_memory=vector,
         learner=learner,
-        tool_registry=registry
+        tool_registry=registry,
+        consciousness=consciousness
     )
     session_id = agent.new_session()
     logger.info(f"Session gestartet: {session_id}")
+
+    # Initialize background worker
+    from core.background_worker import BackgroundWorker
+    background_worker = BackgroundWorker(agent)
+    background_worker.setup_default_tasks()
+    logger.info("Hintergrundarbeiter initialisiert")
 
     # Initialize Voice (optional)
     tts = None
@@ -243,7 +279,12 @@ async def main():
         access_log=False
     )
     server = uvicorn.Server(config)
-    await server.serve()
+
+    # Starte Background-Worker parallel zum Web-Server
+    await asyncio.gather(
+        server.serve(),
+        background_worker.run_forever()
+    )
 
 
 if __name__ == "__main__":
