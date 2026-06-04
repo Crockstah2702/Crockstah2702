@@ -201,6 +201,15 @@ async def main():
     vector = VectorMemory(cfg["memory"]["vector_db_path"])
     logger.info("Gedächtnis initialisiert")
 
+    # Initialize MaxMemory (5-level memory system)
+    from memory.max_memory import MaxMemory
+    max_memory = MaxMemory(
+        db_path=cfg["memory"]["db_path"],
+        vector_memory=vector,
+        llm=llm
+    )
+    logger.info("MaxMemory (5 Ebenen) initialisiert")
+
     # Initialize learner
     from memory.learner import Learner
     learner = Learner(llm, episodic, vector)
@@ -223,7 +232,8 @@ async def main():
         vector_memory=vector,
         learner=learner,
         tool_registry=registry,
-        consciousness=consciousness
+        consciousness=consciousness,
+        max_memory=max_memory
     )
     session_id = agent.new_session()
     logger.info(f"Session gestartet: {session_id}")

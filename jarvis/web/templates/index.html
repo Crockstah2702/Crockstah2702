@@ -524,7 +524,10 @@ window.addEventListener('load', () => {
   loadFacts();
   setInterval(checkStatus, 30000);
   setInterval(loadStats, 15000);
+  setInterval(loadConsciousness, 20000);
   initBrowserSTT();
+  // Fetch ARIA's personalized greeting after a short delay
+  setTimeout(fetchGreeting, 1800);
 });
 
 // ════════════════════════════════════════════════
@@ -1256,6 +1259,46 @@ function renderMd(text) {
 
 function esc(t) {
   return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ════════════════════════════════════════════════
+//  GREETING & BEWUSSTSEIN
+// ════════════════════════════════════════════════
+async function fetchGreeting() {
+  try {
+    const useTtsAudio = ttsEnabled && true;
+    const d = await fetch(`/api/greeting?tts_audio=${useTtsAudio}`).then(r => r.json());
+    if (!d.greeting) return;
+
+    // Show greeting as chat bubble (replaces welcome screen)
+    hideWelcome();
+    const bubble = createAssistantBubble();
+    updateBubble(bubble, d.greeting);
+
+    // Play greeting audio if available
+    if (d.audio) {
+      enqueueAudio(d.audio, d.format || 'mp3');
+      ttsAllChunksReceived = true;
+    }
+  } catch (_) {}
+}
+
+async function loadConsciousness() {
+  try {
+    const d = await fetch('/api/consciousness').then(r => r.json());
+    if (!d.emotional_state) return;
+    const desc = d.description || 'ausgeglichen';
+    // Update circle center with emotional state
+    const center = document.getElementById('circleStatus');
+    if (center && !isThinking && !isSpeaking && !isRecording) {
+      center.innerHTML = `ARIA<br><span style="font-size:.5rem;color:var(--accent3)">${desc}</span>`;
+    }
+    // Update stats
+    if (d.total_conversations != null) {
+      const el = document.getElementById('stat-messages');
+      if (el) el.textContent = d.total_conversations;
+    }
+  } catch (_) {}
 }
 
 // Init

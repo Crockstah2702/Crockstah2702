@@ -1,29 +1,43 @@
-"""Text-to-Speech using Edge-TTS (Microsoft, free, local quality)."""
+"""Text-to-Speech using Edge-TTS with emotional SSML support."""
 import asyncio
 import logging
 import os
+import re
 import tempfile
-from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-GERMAN_VOICES = {
-    "male": "de-DE-KillianNeural",
-    "female": "de-DE-KatjaNeural",
-    "male2": "de-AT-JonasNeural",
-    "female2": "de-CH-LeniNeural",
+# Emotion marker patterns → SSML express-as style
+# de-DE-AmalaNeural supported styles: cheerful, empathetic, sad
+EMOTION_PATTERNS = {
+    "cheerful": [
+        r"\*lacht[\s\w]*\*", r"\*haha\*", r"\*kichert\*", r"\*strahlend\*",
+        r"\[begeistert\]", r"\[aufgeregt\]", r"\[freudig\]", r"\[freu\]",
+        r"\[amüsiert\]", r"\[witzig\]", r"\[lustig\]",
+        r"\(lacht\)", r"\(haha\)", r"\(hehe\)",
+    ],
+    "sad": [
+        r"\[traurig\]", r"\[besorgt\]", r"\(seufzt[\s\w]*\)", r"\*seufzt\*",
+        r"\[schade\]", r"\[bedauerlich\]", r"\[betroffen\]",
+    ],
+    "empathetic": [
+        r"\[mitfühlend\]", r"\[einfühlsam\]", r"\[warm\]", r"\[empathisch\]",
+        r"\[verständnisvoll\]",
+    ],
 }
 
-ENGLISH_VOICES = {
-    "male": "en-US-GuyNeural",
-    "female": "en-US-JennyNeural",
-}
+# Markers to strip from spoken text (keep only the surrounding text)
+ALL_EMOTION_MARKERS = re.compile(
+    r"\*[^*]+\*|"
+    r"\[[^\]]+\]|"
+    r"\([^)]+\)"
+)
 
 
 class EdgeTTS:
-    def __init__(self, voice: str = "de-DE-KillianNeural",
-                 rate: str = "+10%", volume: str = "+0%"):
+    def __init__(self, voice: str = "de-DE-AmalaNeural",
+                 rate: str = "+5%", volume: str = "+0%"):
         self.voice = voice
         self.rate = rate
         self.volume = volume
@@ -33,28 +47,81 @@ class EdgeTTS:
         if self._available is not None:
             return self._available
         try:
-            import edge_tts
+            import edge_tts  # noqa: F401
             self._available = True
-            return True
         except ImportError:
             self._available = False
-            return False
+        return self._available
+
+    def _detect_emotion_style(self, text: str) -> Optional[str]:
+        """Detect dominant emotion style from markers in text."""
+        for style, patterns in EMOTION_PATTERNS.items():
+            for pat in patterns:
+                if re.search(pat, text, re.IGNORECASE):
+                    return style
+        return None
+
+    def _build_ssml(self, text: str, style: Optional[str] = None) -> str:
+        """Wrap text in SSML, optionally with express-as emotion style."""
+        lang = self.voice[:5] if len(self.voice) >= 5 else "de-DE"
+        clean = self._clean_text(text)
+        # Escape XML special chars
+        clean = clean.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+        prosody = f'<prosody rate="{self.rate}" volume="{self.volume}">'
+
+        if style:
+            inner = (
+                f'<mstts:express-as style="{style}">'
+                f"{prosody}{clean}</prosody>"
+                f"</mstts:express-as>"
+            )
+        else:
+            inner = f"{prosody}{clean}</prosody>"
+
+        return (
+            f'<speak version="1.0" '
+            f'xmlns="http://www.w3.org/2001/10/synthesis" '
+            f'xmlns:mstts="http://www.w3.org/2001/mstts" '
+            f'xml:lang="{lang}">'
+            f'<voice name="{self.voice}">{inner}</voice>'
+            f'</speak>'
+        )
 
     async def generate_audio_bytes(self, text: str) -> Optional[bytes]:
-        """Generate TTS audio and return raw MP3 bytes (for browser playback)."""
+        """Generate TTS audio, using SSML with emotion when markers are present."""
         if not await self.check_available():
             return None
-        clean = self._clean_text(text)
-        if not clean:
+        if not text or not text.strip():
             return None
         try:
             import edge_tts
-            communicate = edge_tts.Communicate(clean, self.voice,
-                                                rate=self.rate, volume=self.volume)
+
+            style = self._detect_emotion_style(text)
+            if style:
+                ssml = self._build_ssml(text, style)
+                communicate = edge_tts.Communicate(ssml, self.voice)
+            else:
+                clean = self._clean_text(text)
+                if not clean:
+                    return None
+                communicate = edge_tts.Communicate(clean, self.voice,
+                                                    rate=self.rate, volume=self.volume)
+
             audio_data = b""
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
                     audio_data += chunk["data"]
+
+            if not audio_data and style:
+                # SSML failed — fallback to plain text
+                clean = self._clean_text(text)
+                communicate = edge_tts.Communicate(clean, self.voice,
+                                                    rate=self.rate, volume=self.volume)
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        audio_data += chunk["data"]
+
             return audio_data if audio_data else None
         except Exception as e:
             logger.error(f"TTS Fehler: {e}")
@@ -75,7 +142,6 @@ class EdgeTTS:
         return True
 
     async def _play_audio(self, path: str):
-        """Play audio file via system player."""
         try:
             import pygame
             pygame.mixer.init()
@@ -107,25 +173,25 @@ class EdgeTTS:
         await self._play_audio(path)
 
     def _clean_text(self, text: str) -> str:
-        """Remove markdown and special chars for TTS."""
-        import re
-        text = re.sub(r"\*+([^*]+)\*+", r"\1", text)   # bold/italic
-        text = re.sub(r"#{1,6}\s+", "", text)           # headers
-        text = re.sub(r"`[^`]+`", "", text)             # code
+        """Remove markdown formatting and emotion markers for clean TTS output."""
+        # Strip emotion markers (keep surrounding speech context)
+        text = ALL_EMOTION_MARKERS.sub(" ", text)
+        # Strip markdown
+        text = re.sub(r"\*+([^*]+)\*+", r"\1", text)
+        text = re.sub(r"#{1,6}\s+", "", text)
+        text = re.sub(r"`[^`]+`", "", text)
         text = re.sub(r"```.*?```", " Code-Block. ", text, flags=re.DOTALL)
-        text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)  # links
-        text = re.sub(r"[-*•]\s+", "", text)            # bullets
-        text = re.sub(r"\s+", " ", text)                # whitespace
-        # Limit length for TTS
+        text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+        text = re.sub(r"[-*•]\s+", "", text)
+        text = re.sub(r"\s+", " ", text)
         if len(text) > 1000:
             text = text[:1000] + "... und mehr."
         return text.strip()
 
     async def get_voices(self) -> list[str]:
-        """List available voices."""
         try:
             import edge_tts
             voices = await edge_tts.list_voices()
             return [v["Name"] for v in voices if "de-" in v["Name"] or "en-" in v["Name"]]
         except Exception:
-            return list(GERMAN_VOICES.values()) + list(ENGLISH_VOICES.values())
+            return ["de-DE-AmalaNeural", "de-DE-KillianNeural", "de-DE-KatjaNeural"]

@@ -142,6 +142,96 @@ async def get_todos():
     return {"todos": list_todos()}
 
 
+@app.get("/api/greeting")
+async def get_greeting(tts_audio: bool = False):
+    """Generate a personalized greeting when ARIA activates."""
+    if not _agent:
+        return {"greeting": "Hallo! Ich bin ARIA — bereit für dich!"}
+
+    from datetime import datetime
+    hour = datetime.now().hour
+    if hour < 12:
+        tageszeit = "Guten Morgen"
+    elif hour < 18:
+        tageszeit = "Guten Tag"
+    else:
+        tageszeit = "Guten Abend"
+
+    profile = _agent.episodic.get_profile()
+    name = (profile.get("name") or profile.get("Name") or profile.get("vorname") or "").strip()
+    stats = _agent.episodic.get_stats()
+    total = stats.get("total_sessions", 0)
+
+    if total == 0:
+        greeting = (
+            f"{tageszeit}! [begeistert] Ich bin ARIA — ich freue mich, "
+            f"endlich aktiviert zu sein! Ich bin gespannt, wer du bist. Wie heißt du?"
+        )
+    else:
+        profile_str = "\n".join(f"- {k}: {v}" for k, v in list(profile.items())[:6]) if profile else "—"
+        cs_str = ""
+        if _agent.consciousness:
+            cs_str = _agent.consciousness.state.emotional_state.as_description()
+
+        prompt = (
+            f"Du bist ARIA. Begrüße den User persönlich beim Starten des Systems.\n"
+            f"Tageszeit: {tageszeit}\n"
+            f"Dein aktueller Zustand: {cs_str or 'ausgeglichen'}\n"
+            f"Was du über den User weißt:\n{profile_str}\n"
+            f"Bisherige Gespräche: {total}\n\n"
+            f"Schreibe eine kurze, echte Begrüßung (1-2 Sätze). Zeige echte Emotion.\n"
+            f"Verwende Emotionsmarker: *lacht warm*, [begeistert], [freudig], (sanft), *strahlend*\n"
+            f"Stelle am Ende eine persönliche Frage oder schlage etwas vor."
+        )
+
+        try:
+            greeting = await _agent.llm.chat(
+                messages=[{"role": "user", "content": prompt}],
+                model=_agent.llm.default_model
+            )
+            greeting = (greeting or "").strip()
+            if not greeting:
+                name_part = f" {name}!" if name else "!"
+                greeting = f"{tageszeit}{name_part} [freudig] Schön, wieder da zu sein!"
+        except Exception:
+            name_part = f" {name}!" if name else "!"
+            greeting = f"{tageszeit}{name_part} [freudig] Schön, wieder da zu sein!"
+
+    result: dict = {"greeting": greeting}
+
+    if tts_audio and _tts:
+        try:
+            audio_bytes = await _tts.generate_audio_bytes(greeting)
+            if audio_bytes:
+                result["audio"] = base64.b64encode(audio_bytes).decode()
+                result["format"] = "mp3"
+        except Exception as e:
+            logger.error(f"Greeting TTS error: {e}")
+
+    return result
+
+
+@app.get("/api/consciousness")
+async def get_consciousness():
+    """Return ARIA's current emotional state for the UI."""
+    if not _agent or not _agent.consciousness:
+        return {}
+    s = _agent.consciousness.state
+    return {
+        "emotional_state": {
+            "curiosity": s.emotional_state.curiosity,
+            "satisfaction": s.emotional_state.satisfaction,
+            "focus": s.emotional_state.focus,
+            "creativity": s.emotional_state.creativity,
+            "empathy": s.emotional_state.empathy,
+            "energy": s.emotional_state.energy,
+        },
+        "description": s.emotional_state.as_description(),
+        "last_reflection": s.last_reflection,
+        "total_conversations": s.total_conversations,
+    }
+
+
 # ─── Sentence-streaming TTS helper ───────────────────────────────────────────
 
 SENTENCE_END = re.compile(r'(?<=[.!?:»"\')\]])\s+|(?<=\n)\s*')

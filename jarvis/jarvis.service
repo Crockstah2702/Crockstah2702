@@ -1,0 +1,17 @@
+[Unit]
+Description=ARIA - Lokaler KI-Assistent (Artificial Responsive Intelligence Assistant)
+Documentation=https://github.com/crockstah2702/crockstah2702
+After=network.target graphical-session.target
+Wants=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/jarvis
+ExecStart=%h/jarvis/venv/bin/python %h/jarvis/main.py
+Restart=on-failure
+RestartSec=10
+Environment=DISPLAY=:0
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+
+[Install]
+WantedBy=default.target
