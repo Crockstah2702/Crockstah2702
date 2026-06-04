@@ -40,40 +40,42 @@ class EdgeTTS:
             self._available = False
             return False
 
-    async def speak(self, text: str, blocking: bool = True) -> bool:
-        """Convert text to speech and play it."""
+    async def generate_audio_bytes(self, text: str) -> Optional[bytes]:
+        """Generate TTS audio and return raw MP3 bytes (for browser playback)."""
         if not await self.check_available():
-            logger.warning("edge-tts nicht verfügbar.")
-            return False
-
+            return None
+        clean = self._clean_text(text)
+        if not clean:
+            return None
         try:
             import edge_tts
-
-            # Clean text for TTS (remove markdown)
-            clean = self._clean_text(text)
-            if not clean:
-                return False
-
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-                tmp_path = f.name
-
             communicate = edge_tts.Communicate(clean, self.voice,
                                                 rate=self.rate, volume=self.volume)
-            await communicate.save(tmp_path)
-
-            if blocking:
-                await self._play_audio(tmp_path)
-            else:
-                asyncio.create_task(self._play_and_cleanup(tmp_path))
-
-            return True
-
+            audio_data = b""
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_data += chunk["data"]
+            return audio_data if audio_data else None
         except Exception as e:
             logger.error(f"TTS Fehler: {e}")
+            return None
+
+    async def speak(self, text: str, blocking: bool = True) -> bool:
+        """Generate and play TTS locally (server-side fallback)."""
+        audio_bytes = await self.generate_audio_bytes(text)
+        if not audio_bytes:
             return False
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            f.write(audio_bytes)
+            tmp_path = f.name
+        if blocking:
+            await self._play_audio(tmp_path)
+        else:
+            asyncio.create_task(self._play_and_cleanup(tmp_path))
+        return True
 
     async def _play_audio(self, path: str):
-        """Play audio file."""
+        """Play audio file via system player."""
         try:
             import pygame
             pygame.mixer.init()
@@ -84,25 +86,17 @@ class EdgeTTS:
             pygame.mixer.music.stop()
             pygame.mixer.quit()
         except ImportError:
-            # Fallback: use system player
-            import subprocess
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    "mpg123", "-q", path,
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL
-                )
-                await proc.wait()
-            except FileNotFoundError:
+            for player in [["mpg123", "-q"], ["aplay"], ["afplay"]]:
                 try:
                     proc = await asyncio.create_subprocess_exec(
-                        "aplay", path,
+                        *player, path,
                         stdout=asyncio.subprocess.DEVNULL,
                         stderr=asyncio.subprocess.DEVNULL
                     )
                     await proc.wait()
+                    break
                 except FileNotFoundError:
-                    logger.warning("Kein Audio-Player gefunden (pygame/mpg123/aplay).")
+                    continue
         finally:
             try:
                 os.unlink(path)

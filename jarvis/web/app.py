@@ -1,14 +1,15 @@
 """FastAPI web application for Jarvis AI."""
 import asyncio
+import base64
 import json
 import logging
 import os
-import sys
+import tempfile
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -23,7 +24,6 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# Global agent reference (set by main.py)
 _agent = None
 _tts = None
 _stt = None
@@ -38,7 +38,6 @@ def init_app(agent, tts=None, stt=None, config=None):
     _config = config
 
 
-# Serve static files
 static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -52,8 +51,7 @@ class ChatRequest(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    template_path = Path(__file__).parent / "templates" / "index.html"
-    return template_path.read_text(encoding="utf-8")
+    return (Path(__file__).parent / "templates" / "index.html").read_text(encoding="utf-8")
 
 
 @app.get("/api/status")
@@ -68,7 +66,9 @@ async def status():
         "ollama_connected": connected,
         "models": models,
         "current_model": _agent.llm.default_model,
-        "stats": stats
+        "stats": stats,
+        "tts_available": _tts is not None,
+        "stt_available": _stt is not None,
     }
 
 
@@ -77,8 +77,6 @@ async def chat(req: ChatRequest):
     if not _agent:
         raise HTTPException(503, "Jarvis not initialized")
     response = await _agent.chat(req.message, req.session_id)
-    if req.tts and _tts:
-        asyncio.create_task(_tts.speak(response, blocking=False))
     return {"response": response, "session_id": _agent.current_session}
 
 
@@ -100,7 +98,6 @@ async def set_model(model_name: str):
 
 @app.post("/api/pull_model/{model_name}")
 async def pull_model(model_name: str):
-    """Pull a model from Ollama registry."""
     if not _agent:
         raise HTTPException(503, "Not ready")
 
@@ -124,8 +121,7 @@ async def memory_stats():
 async def get_facts():
     if not _agent:
         return {"facts": []}
-    facts = _agent.episodic.get_facts(limit=50)
-    return {"facts": facts}
+    return {"facts": _agent.episodic.get_facts(limit=50)}
 
 
 @app.get("/api/memory/history")
@@ -141,19 +137,12 @@ async def get_history(session_id: Optional[str] = None, limit: int = 20):
 async def new_session():
     if not _agent:
         raise HTTPException(503, "Not ready")
-    session_id = _agent.new_session()
-    return {"session_id": session_id}
-
-
-@app.get("/api/notes")
-async def get_notes(search: str = ""):
-    from jarvis.tools.notes import list_notes
-    return {"notes": list_notes(search)}
+    return {"session_id": _agent.new_session()}
 
 
 @app.get("/api/todos")
 async def get_todos():
-    from jarvis.tools.notes import list_todos
+    from tools.notes import list_todos
     return {"todos": list_todos()}
 
 
@@ -161,46 +150,118 @@ async def get_todos():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     session_id = _agent.new_session() if _agent else None
-    logger.info(f"WebSocket connected, session: {session_id}")
 
     try:
         while True:
             data = await websocket.receive_json()
             msg_type = data.get("type", "chat")
 
+            # ── Text-Chat ──────────────────────────────────────────────
             if msg_type == "chat":
-                user_message = data.get("message", "")
+                user_message = data.get("message", "").strip()
                 use_tts = data.get("tts", False)
-
-                if not user_message.strip():
+                if not user_message:
                     continue
 
-                await websocket.send_json({
-                    "type": "start",
-                    "session_id": session_id
-                })
+                await websocket.send_json({"type": "start", "session_id": session_id})
 
+                final_response = ""
                 async for event in _agent.chat_stream(user_message, session_id):
                     await websocket.send_json(event)
+                    if event["type"] == "done":
+                        final_response = event.get("response", "")
 
-                # TTS for final response
-                if use_tts and _tts:
-                    # Get last done event
-                    pass
+                # TTS: generate audio on server, send base64 to browser
+                if use_tts and _tts and final_response:
+                    await websocket.send_json({"type": "tts_start"})
+                    try:
+                        audio_bytes = await _tts.generate_audio_bytes(final_response)
+                        if audio_bytes:
+                            audio_b64 = base64.b64encode(audio_bytes).decode()
+                            await websocket.send_json({
+                                "type": "tts_audio",
+                                "audio": audio_b64,
+                                "format": "mp3"
+                            })
+                        else:
+                            await websocket.send_json({"type": "tts_fallback", "text": final_response})
+                    except Exception as e:
+                        logger.error(f"TTS error: {e}")
+                        await websocket.send_json({"type": "tts_fallback", "text": final_response})
 
+            # ── Spracheingabe: Audio → Whisper → Text ──────────────────
             elif msg_type == "voice_data":
-                # Receive base64 audio data and transcribe
+                audio_b64 = data.get("audio", "")
+                audio_format = data.get("format", "webm")
+                if not audio_b64:
+                    continue
+
+                await websocket.send_json({"type": "stt_processing"})
+
                 if _stt:
-                    import base64
-                    import tempfile
-                    audio_b64 = data.get("audio", "")
-                    audio_bytes = base64.b64decode(audio_b64)
-                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                        f.write(audio_bytes)
-                        tmp_path = f.name
-                    text = await _stt.transcribe_file(tmp_path)
-                    os.unlink(tmp_path)
-                    await websocket.send_json({"type": "transcription", "text": text or ""})
+                    try:
+                        audio_bytes = base64.b64decode(audio_b64)
+                        suffix = f".{audio_format}"
+                        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+                            f.write(audio_bytes)
+                            tmp_path = f.name
+
+                        text = await _stt.transcribe_file(tmp_path)
+                        try:
+                            os.unlink(tmp_path)
+                        except Exception:
+                            pass
+
+                        if text and text.strip():
+                            await websocket.send_json({
+                                "type": "transcription",
+                                "text": text.strip()
+                            })
+
+                            # Auto-send: direkt als Chat weiterverarbeiten
+                            if data.get("auto_send", True):
+                                use_tts = data.get("tts", True)
+                                await websocket.send_json({
+                                    "type": "start",
+                                    "session_id": session_id,
+                                    "from_voice": True
+                                })
+                                final_response = ""
+                                async for event in _agent.chat_stream(text.strip(), session_id):
+                                    await websocket.send_json(event)
+                                    if event["type"] == "done":
+                                        final_response = event.get("response", "")
+
+                                # TTS-Antwort zurück an Browser
+                                if use_tts and _tts and final_response:
+                                    await websocket.send_json({"type": "tts_start"})
+                                    try:
+                                        audio_bytes = await _tts.generate_audio_bytes(final_response)
+                                        if audio_bytes:
+                                            await websocket.send_json({
+                                                "type": "tts_audio",
+                                                "audio": base64.b64encode(audio_bytes).decode(),
+                                                "format": "mp3"
+                                            })
+                                        else:
+                                            await websocket.send_json({
+                                                "type": "tts_fallback",
+                                                "text": final_response
+                                            })
+                                    except Exception as e:
+                                        logger.error(f"TTS error: {e}")
+                        else:
+                            await websocket.send_json({"type": "transcription", "text": ""})
+
+                    except Exception as e:
+                        logger.error(f"STT error: {e}")
+                        await websocket.send_json({
+                            "type": "stt_error",
+                            "message": f"Spracherkennung fehlgeschlagen: {e}"
+                        })
+                else:
+                    # Kein Whisper → Web Speech API hat schon transkribiert, Text kommt direkt
+                    await websocket.send_json({"type": "stt_unavailable"})
 
             elif msg_type == "ping":
                 await websocket.send_json({"type": "pong"})
