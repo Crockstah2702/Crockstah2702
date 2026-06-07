@@ -332,6 +332,16 @@ def _parse_rss(xml_text: str, max_items: int) -> List[Tuple[str, str]]:
     return items
 
 
+import re as _re
+
+def _bereinige_titel(titel: str) -> str:
+    """Entfernt Quellenangaben am Titelende wie ' - Merkur' oder ' | SPIEGEL'."""
+    # Nur entfernen wenn LEERZEICHEN vor dem Trennzeichen (verhindert "Trump-Streit")
+    # Suffix max 40 Zeichen = kurzer Quellname, kein Satzinhalt
+    titel = _re.sub(r'\s+[|\-–]\s+[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ\s.]{1,40}$', '', titel).strip()
+    return titel
+
+
 def hole_news_trends(max_pro_feed: int = 5) -> List[Dict]:
     """Holt aktuelle Headlines aus RSS-Feeds via eingebautem XML-Parser."""
     trends = []
@@ -342,6 +352,7 @@ def hole_news_trends(max_pro_feed: int = 5) -> List[Dict]:
             if r.status_code != 200:
                 continue
             for titel, url in _parse_rss(r.text, max_pro_feed):
+                titel = _bereinige_titel(titel)
                 if len(titel) < 10:
                     continue
                 trends.append({
@@ -426,22 +437,37 @@ def sortiere_trends(trends: List[Dict]) -> List[Dict]:
     return sorted(trends, key=lambda x: x.get("score", 0), reverse=True)
 
 
+_FORMAT_ROTATION = [
+    "text_on_screen", "voiceover_bilder", "listicle",
+    "animation_text", "react_kommentar", "screen_record",
+    "compilation", "hande_pov",
+]
+_format_counter: Dict[str, int] = {}
+
 def empfehle_format(trend: Dict) -> Tuple[str, Dict]:
     """Wählt das beste Faceless-Format für einen Trend."""
     kategorie = trend.get("kategorie", "")
     titel = trend.get("titel", "").lower()
 
-    # Einfache Heuristik je nach Trend-Typ
-    if kategorie == "video":
-        key = "react_kommentar"
-    elif kategorie == "news":
-        key = "voiceover_bilder"
-    elif any(w in titel for w in ["top", "best", "liste", "tipps"]):
+    # Keyword-Heuristik
+    if any(w in titel for w in ["top ", "beste", "liste", "tipps", "wege", "fakten", "gründe"]):
         key = "listicle"
-    elif kategorie == "suche":
-        key = "text_on_screen"
-    elif kategorie == "community":
+    elif kategorie == "video":
         key = "react_kommentar"
+    elif kategorie == "community":
+        # Abwechselnd react und screen_record
+        n = _format_counter.get("community", 0)
+        key = ["react_kommentar", "screen_record", "animation_text"][n % 3]
+        _format_counter["community"] = n + 1
+    elif kategorie == "news":
+        # Abwechslung statt immer Voiceover
+        n = _format_counter.get("news", 0)
+        key = ["voiceover_bilder", "text_on_screen", "animation_text", "listicle"][n % 4]
+        _format_counter["news"] = n + 1
+    elif kategorie == "suche":
+        n = _format_counter.get("suche", 0)
+        key = ["text_on_screen", "listicle", "screen_record"][n % 3]
+        _format_counter["suche"] = n + 1
     else:
         key = "listicle"
 
@@ -548,20 +574,37 @@ def generiere_video_idee(trend: Dict, fmt: Dict) -> str:
     return ideen_templates.get(key, f"Erstelle ein Video über '{titel}' im Format '{fmt['name']}'")
 
 
+_STOPPWOERTER = {
+    "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem",
+    "und", "oder", "aber", "für", "mit", "von", "bei", "nach", "vor", "über",
+    "unter", "auf", "an", "in", "ist", "sind", "wird", "hat", "haben", "nicht",
+    "sich", "auch", "noch", "wie", "was", "wer", "wo", "wenn", "dass", "als",
+    "the", "and", "for", "with", "from", "that", "this", "says", "his", "her",
+    "its", "was", "are", "been", "will", "have", "after", "amid",
+}
+
 def generiere_hashtags(trend: Dict) -> str:
-    """Generiert relevante Hashtags für den Trend."""
-    basis = ["#fyp", "#foryou", "#viral", "#foryoupage", "#trending"]
-    trend_wort = trend["titel"].split()[0].lower().replace(",", "").replace(".", "")
+    """Generiert relevante Hashtags mit aussagekräftigen Keywords aus dem Titel."""
+    basis = ["#fyp", "#foryou", "#viral"]
     kategorie_tags = {
-        "gaming": ["#gaming", "#gamer", "#games"],
-        "news": ["#news", "#aktuell", "#wusstest"],
-        "video": ["#youtube", "#reaction", "#musthave"],
-        "suche": ["#tipsandtricks", "#lifehack", "#wissenswertes"],
-        "community": ["#reddit", "#community", "#storytime"],
+        "gaming": ["#gaming", "#gamer"],
+        "news": ["#news", "#aktuell"],
+        "video": ["#reaction", "#youtube"],
+        "suche": ["#lifehack", "#wissenswertes"],
+        "community": ["#community", "#reddit"],
     }
-    kat_tags = kategorie_tags.get(trend.get("kategorie", ""), ["#knowledge", "#facts"])
-    alle = basis[:3] + [f"#{trend_wort}"] + kat_tags[:2]
-    return " ".join(alle)
+    kat_tags = kategorie_tags.get(trend.get("kategorie", ""), ["#trending"])
+
+    # Wähle 1–2 aussagekräftige Wörter aus dem Titel
+    woerter = [
+        w.lower().strip('.,!?:;"\'„“–-')
+        for w in trend["titel"].split()
+        if len(w) > 4 and w.lower().strip('.,!?:;"\'„"–-') not in _STOPPWOERTER
+    ]
+    keyword_tags = [f"#{w}" for w in woerter[:2] if w.isalpha()]
+
+    alle = basis + keyword_tags + kat_tags[:1]
+    return " ".join(alle[:6])
 
 
 # ── Posting-Plan ────────────────────────────────────────────────────────────
