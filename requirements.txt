@@ -1,3 +1,9 @@
 panda3d>=1.10.14
 pygame>=2.5.0
 numpy>=1.24.0
+
+# TikTok Trend Analyzer
+pytrends>=4.9.0
+requests>=2.31.0
+rich>=13.7.0
+# feedparser is replaced by stdlib xml.etree.ElementTree
