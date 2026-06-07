@@ -20,7 +20,36 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import xml.etree.ElementTree as ET
 
-import requests
+# ── Abhängigkeits-Check ────────────────────────────────────────────────────
+_MISSING = []
+try:
+    import requests
+except ImportError:
+    _MISSING.append("requests")
+
+try:
+    from rich import box
+    from rich.columns import Columns
+    from rich.console import Console
+    from rich.markdown import Markdown
+    from rich.panel import Panel
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
+    from rich.rule import Rule
+    from rich.table import Table
+    from rich.text import Text
+    console = Console()
+except ImportError:
+    _MISSING.append("rich")
+    import types
+    # Minimal-Fallback damit der Fehlertext trotzdem erscheint
+    console = types.SimpleNamespace(print=print)
+
+if _MISSING:
+    print("\n❌ Fehlende Pakete: " + ", ".join(_MISSING))
+    print("\nBitte installieren mit:\n")
+    print(f"    pip install {' '.join(_MISSING)} pytrends\n")
+    print("Danach erneut starten.")
+    sys.exit(1)
 
 # Patch urllib3 Retry for newer versions before importing pytrends
 try:
@@ -34,18 +63,13 @@ try:
 except Exception:
     pass
 
-from pytrends.request import TrendReq
-from rich import box
-from rich.columns import Columns
-from rich.console import Console
-from rich.markdown import Markdown
-from rich.panel import Panel
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
-from rich.rule import Rule
-from rich.table import Table
-from rich.text import Text
-
-console = Console()
+try:
+    from pytrends.request import TrendReq
+    _PYTRENDS_OK = True
+except ImportError:
+    _PYTRENDS_OK = False
+    console.print("[yellow]⚠ pytrends nicht installiert — Google Trends deaktiviert.[/yellow]")
+    console.print("[dim]  Installieren: pip install pytrends[/dim]\n")
 
 # ── Faceless-Formate ────────────────────────────────────────────────────────
 
@@ -208,22 +232,23 @@ def hole_google_trends(land: str = "DE", anzahl: int = 10) -> List[Dict]:
     """Holt aktuelle Google Trending Searches."""
     trends = []
     # Methode 1: pytrends (inoffizielle API)
-    try:
-        pytrends = TrendReq(hl="de-DE", tz=60, timeout=(10, 25))
-        trending = pytrends.trending_searches(pn=land.lower())
-        for i, term in enumerate(trending[0][:anzahl]):
-            trends.append({
-                "titel": str(term),
-                "quelle": "Google Trends",
-                "quelle_emoji": "🔍",
-                "score": anzahl - i,
-                "url": f"https://trends.google.com/trends/trendingsearches/daily?geo={land}",
-                "kategorie": "suche",
-            })
-        if trends:
-            return trends
-    except Exception:
-        pass
+    if _PYTRENDS_OK:
+        try:
+            pytrends = TrendReq(hl="de-DE", tz=60, timeout=(10, 25))
+            trending = pytrends.trending_searches(pn=land.lower())
+            for i, term in enumerate(trending[0][:anzahl]):
+                trends.append({
+                    "titel": str(term),
+                    "quelle": "Google Trends",
+                    "quelle_emoji": "🔍",
+                    "score": anzahl - i,
+                    "url": f"https://trends.google.com/trends/trendingsearches/daily?geo={land}",
+                    "kategorie": "suche",
+                })
+            if trends:
+                return trends
+        except Exception:
+            pass
 
     # Methode 2: Google Trends RSS (öffentlich)
     try:
