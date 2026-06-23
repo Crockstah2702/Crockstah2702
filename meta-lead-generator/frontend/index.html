@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vodafone Angebote – Jetzt wechseln & sparen</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="container">
+      <div class="logo">
+        <div class="logo-icon">◉</div>
+        <span>Vodafone</span>
+      </div>
+      <div class="header-badge">Kostenlose Beratung</div>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-tag">Exklusives Angebot in deiner Region</div>
+      <h1>Internet. TV. Strom. Mobilfunk.<br /><span>Alles aus einer Hand.</span></h1>
+      <p class="hero-sub">Bis zu <strong>50% günstiger</strong> als dein aktueller Anbieter – ohne Kündigung, wir übernehmen alles für dich.</p>
+      <div class="hero-badges">
+        <span>✓ Kein Aufwand – wir kündigen für dich</span>
+        <span>✓ Schnell verfügbar</span>
+        <span>✓ Persönliche Beratung vor Ort</span>
+      </div>
+      <a href="#form" class="btn-hero">Jetzt kostenloses Angebot sichern →</a>
+    </div>
+    <div class="hero-wave"></div>
+  </section>
+
+  <!-- PRODUCTS -->
+  <section class="products" id="products">
+    <div class="container">
+      <h2>Was interessiert dich?</h2>
+      <p class="section-sub">Wähle einen oder mehrere Bereiche – wir erstellen dir ein individuelles Paket</p>
+      <div class="product-grid">
+        <div class="product-card" data-product="internet" onclick="selectProduct(this)">
+          <div class="product-icon">🌐</div>
+          <h3>Internet</h3>
+          <p>DSL & Glasfaser<br />bis 1.000 Mbit/s</p>
+          <div class="product-price">ab 19,99 €/Monat</div>
+        </div>
+        <div class="product-card" data-product="tv" onclick="selectProduct(this)">
+          <div class="product-icon">📺</div>
+          <h3>Kabel TV</h3>
+          <p>Über 100 Sender<br />inkl. HD & Streaming</p>
+          <div class="product-price">ab 9,99 €/Monat</div>
+        </div>
+        <div class="product-card" data-product="mobilfunk" onclick="selectProduct(this)">
+          <div class="product-icon">📱</div>
+          <h3>Mobilfunk</h3>
+          <p>5G Netz<br />Unbegrenzt telefonieren</p>
+          <div class="product-price">ab 14,99 €/Monat</div>
+        </div>
+        <div class="product-card" data-product="strom" onclick="selectProduct(this)">
+          <div class="product-icon">⚡</div>
+          <h3>Strom & Gas</h3>
+          <p>Ökostrom & Erdgas<br />Günstige Tarife</p>
+          <div class="product-price">ab 89,99 €/Monat</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BENEFITS -->
+  <section class="benefits">
+    <div class="container">
+      <div class="benefits-grid">
+        <div class="benefit">
+          <div class="benefit-icon">🚀</div>
+          <h3>Schnelle Schaltung</h3>
+          <p>Dein Anschluss ist meist innerhalb von 7 Tagen aktiv.</p>
+        </div>
+        <div class="benefit">
+          <div class="benefit-icon">💰</div>
+          <h3>Bis zu 50% sparen</h3>
+          <p>Wir vergleichen alle Angebote und finden den günstigsten Tarif für dich.</p>
+        </div>
+        <div class="benefit">
+          <div class="benefit-icon">🤝</div>
+          <h3>Persönliche Beratung</h3>
+          <p>Ein Berater kommt direkt zu dir nach Hause – kostenlos und unverbindlich.</p>
+        </div>
+        <div class="benefit">
+          <div class="benefit-icon">📋</div>
+          <h3>Wir kündigen für dich</h3>
+          <p>Kein Papierkram. Wir übernehmen die komplette Kündigung beim alten Anbieter.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LEAD FORM -->
+  <section class="form-section" id="form">
+    <div class="container">
+      <div class="form-wrapper">
+        <div class="form-header">
+          <h2>Kostenloses Angebot anfordern</h2>
+          <p>In unter 2 Minuten – wir melden uns innerhalb von 24 Stunden bei dir</p>
+        </div>
+
+        <form id="leadForm" novalidate>
+          <!-- Step 1: Produkte -->
+          <div class="form-step active" id="step1">
+            <h3 class="step-title">Schritt 1 von 3 – Was interessiert dich?</h3>
+            <div class="checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="products" value="internet" />
+                <span class="checkbox-custom">🌐</span>
+                <span>Internet / Glasfaser</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" name="products" value="tv" />
+                <span class="checkbox-custom">📺</span>
+                <span>Kabel TV</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" name="products" value="mobilfunk" />
+                <span class="checkbox-custom">📱</span>
+                <span>Mobilfunk</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" name="products" value="strom" />
+                <span class="checkbox-custom">⚡</span>
+                <span>Strom & Gas</span>
+              </label>
+            </div>
+            <button type="button" class="btn-next" onclick="nextStep(1)">Weiter →</button>
+          </div>
+
+          <!-- Step 2: Adresse -->
+          <div class="form-step" id="step2">
+            <h3 class="step-title">Schritt 2 von 3 – Deine Adresse</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Straße *</label>
+                <input type="text" name="street" placeholder="Musterstraße" required />
+              </div>
+              <div class="form-group small">
+                <label>Hausnummer *</label>
+                <input type="text" name="house_number" placeholder="12a" required />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group small">
+                <label>PLZ *</label>
+                <input type="text" name="zip" placeholder="12345" maxlength="5" required />
+              </div>
+              <div class="form-group">
+                <label>Ort *</label>
+                <input type="text" name="city" placeholder="Musterstadt" required />
+              </div>
+            </div>
+            <div class="form-nav">
+              <button type="button" class="btn-back" onclick="prevStep(2)">← Zurück</button>
+              <button type="button" class="btn-next" onclick="nextStep(2)">Weiter →</button>
+            </div>
+          </div>
+
+          <!-- Step 3: Kontakt -->
+          <div class="form-step" id="step3">
+            <h3 class="step-title">Schritt 3 von 3 – Deine Kontaktdaten</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Vorname *</label>
+                <input type="text" name="first_name" placeholder="Max" required />
+              </div>
+              <div class="form-group">
+                <label>Nachname *</label>
+                <input type="text" name="last_name" placeholder="Mustermann" required />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Telefonnummer *</label>
+              <input type="tel" name="phone" placeholder="+49 151 12345678" required />
+            </div>
+            <div class="form-group">
+              <label>E-Mail (optional)</label>
+              <input type="email" name="email" placeholder="max@beispiel.de" />
+            </div>
+            <div class="form-group">
+              <label>Wann können wir dich am besten erreichen?</label>
+              <select name="best_time">
+                <option value="">Beliebig</option>
+                <option value="vormittag">Vormittags (8–12 Uhr)</option>
+                <option value="mittag">Mittags (12–14 Uhr)</option>
+                <option value="nachmittag">Nachmittags (14–18 Uhr)</option>
+                <option value="abend">Abends (18–20 Uhr)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Notiz (optional)</label>
+              <textarea name="note" placeholder="z.B. aktueller Anbieter, besondere Wünsche..." rows="3"></textarea>
+            </div>
+            <div class="consent-text">
+              <label class="checkbox-label consent">
+                <input type="checkbox" name="consent" required />
+                <span>Ich stimme zu, dass meine Daten zur Angebotsberechnung verwendet werden. Keine Weitergabe an Dritte. <a href="#datenschutz">Datenschutz</a></span>
+              </label>
+            </div>
+            <div class="form-nav">
+              <button type="button" class="btn-back" onclick="prevStep(3)">← Zurück</button>
+              <button type="submit" class="btn-submit" id="submitBtn">Angebot anfordern ✓</button>
+            </div>
+          </div>
+
+          <!-- Success -->
+          <div class="form-step" id="stepSuccess">
+            <div class="success-content">
+              <div class="success-icon">✅</div>
+              <h3>Anfrage erfolgreich!</h3>
+              <p>Vielen Dank! Wir melden uns innerhalb von <strong>24 Stunden</strong> bei dir.</p>
+              <p class="success-sub">Unser Berater kommt kostenlos und unverbindlich zu dir nach Hause.</p>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer" id="datenschutz">
+    <div class="container">
+      <p>© 2024 Vodafone Vertriebspartner | <a href="#">Impressum</a> | <a href="#">Datenschutz</a></p>
+      <p class="footer-disclaimer">Dieses Angebot wird von einem autorisierten Vodafone Vertriebspartner bereitgestellt.</p>
+    </div>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

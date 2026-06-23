@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lead Dashboard – Vodafone D2D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-icon">◉</span>
+      <span>Vodafone D2D</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-view="leads">
+        <span class="nav-icon">📋</span> Alle Leads
+      </a>
+      <a href="#" class="nav-item" data-view="stats">
+        <span class="nav-icon">📊</span> Statistiken
+      </a>
+      <a href="#" class="nav-item" data-view="export">
+        <span class="nav-icon">📤</span> Export
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="../frontend/index.html" target="_blank" class="sidebar-link">🔗 Landing Page</a>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <h1 class="page-title">Lead Übersicht</h1>
+      <div class="topbar-actions">
+        <button class="btn-refresh" onclick="loadLeads()">↻ Aktualisieren</button>
+        <button class="btn-export" onclick="exportCSV()">📥 CSV Export</button>
+      </div>
+    </div>
+
+    <!-- STATS CARDS -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Gesamt Leads</div>
+        <div class="stat-value" id="statTotal">–</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Heute</div>
+        <div class="stat-value" id="statToday">–</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Neu (unbearbeitet)</div>
+        <div class="stat-value red" id="statNew">–</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Abgeschlossen</div>
+        <div class="stat-value green" id="statDone">–</div>
+      </div>
+    </div>
+
+    <!-- FILTER BAR -->
+    <div class="filter-bar">
+      <input type="text" id="searchInput" placeholder="🔍 Suche nach Name, Ort, Telefon..." oninput="filterLeads()" />
+      <select id="filterProduct" onchange="filterLeads()">
+        <option value="">Alle Produkte</option>
+        <option value="internet">🌐 Internet</option>
+        <option value="tv">📺 TV</option>
+        <option value="mobilfunk">📱 Mobilfunk</option>
+        <option value="strom">⚡ Strom</option>
+      </select>
+      <select id="filterStatus" onchange="filterLeads()">
+        <option value="">Alle Status</option>
+        <option value="neu">Neu</option>
+        <option value="kontaktiert">Kontaktiert</option>
+        <option value="termin">Termin vereinbart</option>
+        <option value="abgeschlossen">Abgeschlossen</option>
+        <option value="kein_interesse">Kein Interesse</option>
+      </select>
+    </div>
+
+    <!-- LEADS TABLE -->
+    <div class="table-wrapper">
+      <table class="leads-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Telefon</th>
+            <th>Adresse</th>
+            <th>Produkte</th>
+            <th>Erreichbarkeit</th>
+            <th>Datum</th>
+            <th>Status</th>
+            <th>Aktion</th>
+          </tr>
+        </thead>
+        <tbody id="leadsTableBody">
+          <tr>
+            <td colspan="9" class="empty-state">
+              <div>⏳ Leads werden geladen...</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- LEAD DETAIL MODAL -->
+    <div class="modal-overlay" id="modalOverlay" onclick="closeModal()">
+      <div class="modal" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div id="modalContent"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
