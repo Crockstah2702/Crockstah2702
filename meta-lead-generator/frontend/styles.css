@@ -311,6 +311,103 @@ body {
   font-style: italic;
 }
 
+.header-sub {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.75;
+  display: block;
+  margin-top: 2px;
+}
+
+.two-price {
+  align-items: center;
+}
+
+.old-price {
+  font-size: 11px;
+  color: #aaa;
+  text-decoration: line-through;
+  margin-right: 4px;
+  font-weight: 400;
+}
+
+.new-price {
+  color: var(--red);
+  font-weight: 700;
+}
+
+/* GigaKombi Banner */
+.kombi-banner {
+  background: linear-gradient(135deg, #1A1A1A 0%, #2d2d2d 100%);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  margin-bottom: 32px;
+  color: white;
+}
+
+.kombi-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.kombi-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.kombi-card {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 18px 20px;
+  position: relative;
+}
+
+.kombi-best {
+  background: rgba(230,0,0,0.18);
+  border-color: var(--red);
+}
+
+.kombi-badge {
+  position: absolute;
+  top: -10px;
+  left: 16px;
+  background: var(--red);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.kombi-combo {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.8;
+  margin-bottom: 6px;
+}
+
+.kombi-saving {
+  font-size: 28px;
+  font-weight: 800;
+  color: #4ade80;
+  margin-bottom: 4px;
+}
+
+.kombi-best .kombi-saving {
+  color: #ff6b6b;
+}
+
+.kombi-desc {
+  font-size: 12px;
+  opacity: 0.65;
+  line-height: 1.5;
+}
+
 /* ============================================================
    BENEFITS
    ============================================================ */
