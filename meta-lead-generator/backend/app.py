@@ -41,8 +41,8 @@ def init_db():
                 note         TEXT,
                 status       TEXT DEFAULT "neu",
                 source       TEXT DEFAULT "landing_page",
-                raw_meta     TEXT,   -- raw Meta webhook payload
-                created_at   TEXT DEFAULT (datetime("now", "localtime"))
+                raw_meta     TEXT,
+                created_at   TEXT
             )
         ''')
         conn.commit()
@@ -95,8 +95,8 @@ def create_lead():
         conn.execute('''
             INSERT INTO leads
               (first_name, last_name, phone, email, street, house_number,
-               zip, city, products, best_time, note, source)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+               zip, city, products, best_time, note, source, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         ''', (
             data.get('first_name', ''),
             data.get('last_name', ''),
@@ -110,6 +110,7 @@ def create_lead():
             data.get('best_time', ''),
             data.get('note', ''),
             data.get('source', 'landing_page'),
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         ))
         conn.commit()
 
@@ -185,14 +186,15 @@ def meta_webhook():
             with get_db() as conn:
                 conn.execute('''
                     INSERT INTO leads
-                      (first_name, last_name, phone, products, source, raw_meta)
-                    VALUES (?,?,?,?,?,?)
+                      (first_name, last_name, phone, products, source, raw_meta, created_at)
+                    VALUES (?,?,?,?,?,?,?)
                 ''', (
                     'Meta', 'Lead',
                     f'meta_{lead_id_meta}',
                     json.dumps([]),
                     'meta_ads',
                     json.dumps(value),
+                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 ))
                 conn.commit()
 
