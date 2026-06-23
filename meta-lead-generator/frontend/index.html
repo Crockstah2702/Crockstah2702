@@ -25,7 +25,7 @@
   <section class="hero">
     <div class="container">
       <div class="hero-tag">Exklusives Angebot in deiner Region</div>
-      <h1>Internet. TV. Strom. Mobilfunk.<br /><span>Alles aus einer Hand.</span></h1>
+      <h1>Internet. TV. Mobilfunk. GigaCube.<br /><span>Alles aus einer Hand.</span></h1>
       <p class="hero-sub">Bis zu <strong>50% günstiger</strong> als dein aktueller Anbieter – ohne Kündigung, wir übernehmen alles für dich.</p>
       <div class="hero-badges">
         <span>✓ Kein Aufwand – wir kündigen für dich</span>
@@ -46,27 +46,77 @@
         <div class="product-card" data-product="internet" onclick="selectProduct(this)">
           <div class="product-icon">🌐</div>
           <h3>Internet</h3>
-          <p>DSL & Glasfaser<br />bis 1.000 Mbit/s</p>
-          <div class="product-price">ab 19,99 €/Monat</div>
+          <p>Kabel, DSL & Glasfaser<br />bis 1.000 Mbit/s</p>
+          <div class="product-price">ab 44,99 €/Monat</div>
         </div>
         <div class="product-card" data-product="tv" onclick="selectProduct(this)">
           <div class="product-icon">📺</div>
-          <h3>Kabel TV</h3>
-          <p>Über 100 Sender<br />inkl. HD & Streaming</p>
+          <h3>GigaTV</h3>
+          <p>Bis zu 76 Sender in HD<br />inkl. Streaming & Multiroom</p>
           <div class="product-price">ab 9,99 €/Monat</div>
         </div>
         <div class="product-card" data-product="mobilfunk" onclick="selectProduct(this)">
           <div class="product-icon">📱</div>
-          <h3>Mobilfunk</h3>
-          <p>5G Netz<br />Unbegrenzt telefonieren</p>
-          <div class="product-price">ab 14,99 €/Monat</div>
+          <h3>GigaMobil</h3>
+          <p>4G/5G Netz · 25–∞ GB<br />Telefon & SMS Flat</p>
+          <div class="product-price">ab 9,99 €/Monat*</div>
         </div>
-        <div class="product-card" data-product="strom" onclick="selectProduct(this)">
-          <div class="product-icon">⚡</div>
-          <h3>Strom & Gas</h3>
-          <p>Ökostrom & Erdgas<br />Günstige Tarife</p>
-          <div class="product-price">ab 89,99 €/Monat</div>
+        <div class="product-card" data-product="gigacube" onclick="selectProduct(this)">
+          <div class="product-icon">📡</div>
+          <h3>GigaCube</h3>
+          <p>Internet ohne Kabel<br />Plug & Play · 5G Router</p>
+          <div class="product-price">ab 19,99 €/Monat</div>
         </div>
+      </div>
+      <p style="text-align:center;font-size:12px;color:#999;margin-top:16px">* GigaMobil XS mit Danke Deal & GigaKombi Rabatt. Regulärpreis ab 29,99 €/Mo.</p>
+    </div>
+  </section>
+
+  <!-- TARIFF DETAIL -->
+  <section class="tariffs">
+    <div class="container">
+      <h2>Aktuelle Tarife im Überblick</h2>
+      <p class="section-sub">Gültig ab Januar 2026 – Preise für die ersten 9 Monate</p>
+      <div class="tariff-grid">
+
+        <div class="tariff-box">
+          <div class="tariff-header">🌐 Internet Kabel</div>
+          <div class="tariff-row"><span>GigaZuhause Kabel 50</span><span>44,99 €</span></div>
+          <div class="tariff-row"><span>GigaZuhause Kabel 150</span><span>39,99 €</span></div>
+          <div class="tariff-row"><span>GigaZuhause Kabel 300</span><span>49,99 €</span></div>
+          <div class="tariff-row"><span>GigaZuhause Kabel 600</span><span>54,99 €</span></div>
+          <div class="tariff-row highlight"><span>GigaZuhause Kabel 1000</span><span>64,99 €</span></div>
+          <div class="tariff-note">inkl. TV Connect Zuhause + Allnet Flat</div>
+        </div>
+
+        <div class="tariff-box">
+          <div class="tariff-header">🔷 Internet Glasfaser</div>
+          <div class="tariff-row"><span>GigaZuhause Glasfaser 150</span><span>44,99 €</span></div>
+          <div class="tariff-row"><span>GigaZuhause Glasfaser 300</span><span>49,99 €</span></div>
+          <div class="tariff-row"><span>GigaZuhause Glasfaser 600</span><span>54,99 €</span></div>
+          <div class="tariff-row highlight"><span>GigaZuhause Glasfaser 1000</span><span>69,99 €</span></div>
+          <div class="tariff-note">inkl. TV Connect Zuhause + Allnet Flat</div>
+        </div>
+
+        <div class="tariff-box">
+          <div class="tariff-header">📱 GigaMobil</div>
+          <div class="tariff-row"><span>GigaMobil XS · 25 GB</span><span>29,99 €</span></div>
+          <div class="tariff-row"><span>GigaMobil S · 100 GB</span><span>39,99 €</span></div>
+          <div class="tariff-row"><span>GigaMobil M · 100 GB</span><span>49,99 €</span></div>
+          <div class="tariff-row"><span>GigaMobil L · 280 GB</span><span>59,99 €</span></div>
+          <div class="tariff-row highlight"><span>GigaMobil XL · Unlimited</span><span>79,99 €</span></div>
+          <div class="tariff-note">Mit Danke Deal & GigaKombi bis zu 30 € sparen</div>
+        </div>
+
+        <div class="tariff-box">
+          <div class="tariff-header">📺 GigaTV</div>
+          <div class="tariff-row"><span>GigaTV Cable/Net</span><span>9,99 €</span></div>
+          <div class="tariff-row highlight"><span>GigaTV inkl. VF Premium</span><span>14,99 €</span></div>
+          <div class="tariff-row"><span>GigaTV Home</span><span>9,99 €</span></div>
+          <div class="tariff-row"><span>Netflix Standard m. Werbung</span><span>2,99 €*</span></div>
+          <div class="tariff-note">* statt 4,99 € · exkl. Vodafone Streaming-Vorteil</div>
+        </div>
+
       </div>
     </div>
   </section>
@@ -129,9 +179,9 @@
                 <span>Mobilfunk</span>
               </label>
               <label class="checkbox-label">
-                <input type="checkbox" name="products" value="strom" />
-                <span class="checkbox-custom">⚡</span>
-                <span>Strom & Gas</span>
+                <input type="checkbox" name="products" value="gigacube" />
+                <span class="checkbox-custom">📡</span>
+                <span>GigaCube (Internet ohne Kabel)</span>
               </label>
             </div>
             <button type="button" class="btn-next" onclick="nextStep(1)">Weiter →</button>

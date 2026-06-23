@@ -3,9 +3,9 @@ let currentLead = null;
 
 const PRODUCT_LABELS = {
   internet:  '🌐 Internet',
-  tv:        '📺 TV',
-  mobilfunk: '📱 Mobilfunk',
-  strom:     '⚡ Strom'
+  tv:        '📺 GigaTV',
+  mobilfunk: '📱 GigaMobil',
+  gigacube:  '📡 GigaCube'
 };
 
 const STATUS_LABELS = {
@@ -46,7 +46,7 @@ function getDemoLeads() {
       id: 2, first_name: 'Anna', last_name: 'Schmidt',
       phone: '+49 171 87654321', email: '',
       street: 'Hauptstraße', house_number: '5', zip: '44137', city: 'Dortmund',
-      products: ['mobilfunk', 'strom'], best_time: 'abend',
+      products: ['mobilfunk', 'gigacube'], best_time: 'abend',
       note: '', status: 'kontaktiert',
       created_at: new Date(Date.now() - 86400000).toISOString(), source: 'meta_ads'
     },
