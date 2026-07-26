@@ -219,29 +219,148 @@ class PriceProvider:
 # --------------------------------------------------------------------------- #
 
 class Notifier:
-    def __init__(self):
-        self.bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-        self.chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
-        self.telegram_enabled = bool(self.bot_token and self.chat_id)
-        self._session = requests.Session() if self.telegram_enabled else None
+    """Verteilt Meldungen an Konsole, Telegram und WhatsApp.
 
+    WhatsApp unterstützt drei Anbieter (per Env WHATSAPP_PROVIDER oder
+    automatische Erkennung anhand der gesetzten Variablen):
+
+    - "callmebot" : kostenlos, kein Account, nur an die eigene Nummer.
+                    Env: CALLMEBOT_APIKEY, WHATSAPP_TO
+    - "twilio"    : dedizierte Bot-Nummer über Twilio (Sandbox oder eigen).
+                    Env: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN,
+                         TWILIO_WHATSAPP_FROM, WHATSAPP_TO
+    - "cloud"     : offizielle WhatsApp Business Cloud API (Meta).
+                    Env: WHATSAPP_CLOUD_TOKEN, WHATSAPP_PHONE_NUMBER_ID,
+                         WHATSAPP_TO
+    """
+
+    def __init__(self):
+        self._session = requests.Session()
+
+        # --- Telegram ---
+        self.tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+        self.tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+        self.telegram_enabled = bool(self.tg_token and self.tg_chat)
+
+        # --- WhatsApp ---
+        self.wa_to = os.environ.get("WHATSAPP_TO", "").strip()
+        self.callmebot_key = os.environ.get("CALLMEBOT_APIKEY", "").strip()
+        self.twilio_sid = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
+        self.twilio_token = os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
+        self.twilio_from = os.environ.get("TWILIO_WHATSAPP_FROM", "").strip()
+        self.cloud_token = os.environ.get("WHATSAPP_CLOUD_TOKEN", "").strip()
+        self.cloud_phone_id = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "").strip()
+
+        self.wa_provider = self._detect_wa_provider(
+            os.environ.get("WHATSAPP_PROVIDER", "").strip().lower()
+        )
+        self.whatsapp_enabled = self.wa_provider is not None
+
+    def _detect_wa_provider(self, forced: str) -> Optional[str]:
+        """Wählt den WhatsApp-Anbieter; validiert die nötigen Variablen."""
+        def ok(provider: str) -> bool:
+            if provider == "callmebot":
+                return bool(self.callmebot_key and self.wa_to)
+            if provider == "twilio":
+                return bool(self.twilio_sid and self.twilio_token
+                            and self.twilio_from and self.wa_to)
+            if provider == "cloud":
+                return bool(self.cloud_token and self.cloud_phone_id and self.wa_to)
+            return False
+
+        if forced:
+            if ok(forced):
+                return forced
+            print(f"{YELLOW}[Warnung] WHATSAPP_PROVIDER='{forced}', aber es "
+                  f"fehlen Variablen – WhatsApp ist deaktiviert.{RESET}")
+            return None
+        # Auto-Erkennung in sinnvoller Reihenfolge
+        for provider in ("twilio", "cloud", "callmebot"):
+            if ok(provider):
+                return provider
+        return None
+
+    # ---------------------------------------------------------------- #
     def send(self, message_console: str, message_plain: str) -> None:
         print(message_console)
         if self.telegram_enabled:
-            try:
-                url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
-                self._session.post(
-                    url,
-                    json={
-                        "chat_id": self.chat_id,
-                        "text": message_plain,
-                        "parse_mode": "HTML",
-                        "disable_web_page_preview": True,
-                    },
-                    timeout=15,
-                )
-            except Exception as exc:  # noqa: BLE001
-                print(f"{YELLOW}[Warnung] Telegram-Versand fehlgeschlagen: {exc}{RESET}")
+            self._send_telegram(message_plain)
+        if self.whatsapp_enabled:
+            self._send_whatsapp(message_plain)
+
+    def _send_telegram(self, text: str) -> None:
+        try:
+            url = f"https://api.telegram.org/bot{self.tg_token}/sendMessage"
+            self._session.post(
+                url,
+                json={
+                    "chat_id": self.tg_chat,
+                    "text": text,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": True,
+                },
+                timeout=15,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"{YELLOW}[Warnung] Telegram-Versand fehlgeschlagen: {exc}{RESET}")
+
+    def _send_whatsapp(self, text: str) -> None:
+        try:
+            if self.wa_provider == "callmebot":
+                self._wa_callmebot(text)
+            elif self.wa_provider == "twilio":
+                self._wa_twilio(text)
+            elif self.wa_provider == "cloud":
+                self._wa_cloud(text)
+        except Exception as exc:  # noqa: BLE001
+            print(f"{YELLOW}[Warnung] WhatsApp-Versand fehlgeschlagen: {exc}{RESET}")
+
+    def _wa_callmebot(self, text: str) -> None:
+        # https://www.callmebot.com/blog/free-api-whatsapp-messages/
+        resp = self._session.get(
+            "https://api.callmebot.com/whatsapp.php",
+            params={"phone": self.wa_to, "text": text, "apikey": self.callmebot_key},
+            timeout=20,
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"CallMeBot HTTP {resp.status_code}: {resp.text[:200]}")
+
+    def _wa_twilio(self, text: str) -> None:
+        # https://www.twilio.com/docs/whatsapp
+        from_ = self.twilio_from
+        to_ = self.wa_to
+        if not from_.startswith("whatsapp:"):
+            from_ = "whatsapp:" + from_
+        if not to_.startswith("whatsapp:"):
+            to_ = "whatsapp:" + to_
+        url = (f"https://api.twilio.com/2010-04-01/Accounts/"
+               f"{self.twilio_sid}/Messages.json")
+        resp = self._session.post(
+            url,
+            data={"From": from_, "To": to_, "Body": text},
+            auth=(self.twilio_sid, self.twilio_token),
+            timeout=20,
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Twilio HTTP {resp.status_code}: {resp.text[:300]}")
+
+    def _wa_cloud(self, text: str) -> None:
+        # https://developers.facebook.com/docs/whatsapp/cloud-api
+        to_ = self.wa_to.lstrip("+").replace("whatsapp:", "").replace("+", "")
+        url = f"https://graph.facebook.com/v20.0/{self.cloud_phone_id}/messages"
+        resp = self._session.post(
+            url,
+            headers={"Authorization": f"Bearer {self.cloud_token}"},
+            json={
+                "messaging_product": "whatsapp",
+                "to": to_,
+                "type": "text",
+                "text": {"body": text},
+            },
+            timeout=20,
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Cloud API HTTP {resp.status_code}: {resp.text[:300]}")
 
 
 # --------------------------------------------------------------------------- #
@@ -483,6 +602,9 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
                         help="Sekunden zwischen den Scans (Standard: 30)")
     parser.add_argument("--once", action="store_true",
                         help="Nur einen einzelnen Scan ausführen (z.B. für cron)")
+    parser.add_argument("--test-notify", action="store_true",
+                        help="Test-Nachricht an alle konfigurierten Kanäle "
+                             "(Telegram/WhatsApp) senden und beenden")
     parser.add_argument("--rpc", default=DEFAULT_RPC_URL,
                         help="Solana-RPC-URL (oder Env SOLANA_RPC_URL)")
     parser.add_argument("--state-file", default=DEFAULT_STATE_FILE,
@@ -495,6 +617,22 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
+
+    if args.test_notify:
+        notifier = Notifier()
+        print(f"{BOLD}{CYAN}Test-Benachrichtigung{RESET}")
+        print(f"  Telegram: {'aktiv' if notifier.telegram_enabled else 'aus'}")
+        print(f"  WhatsApp: {notifier.wa_provider if notifier.whatsapp_enabled else 'aus'}")
+        if not (notifier.telegram_enabled or notifier.whatsapp_enabled):
+            print(f"{YELLOW}Kein Kanal konfiguriert (siehe README).{RESET}")
+            return 1
+        notifier.send(
+            f"{GREEN}✅ Test: Solana Wallet Scanner ist verbunden.{RESET}",
+            "✅ Test: Solana Wallet Scanner ist verbunden.",
+        )
+        print(f"{DIM}Gesendet (sofern kein Fehler oben steht).{RESET}")
+        return 0
+
     if not args.wallet:
         print("Fehler: Bitte Wallet-Adresse angeben.\n"
               "  python scanner.py <WALLET_ADRESSE>", file=sys.stderr)
@@ -516,6 +654,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"  Wallet:   {args.wallet}")
     print(f"  RPC:      {args.rpc}")
     print(f"  Telegram: {'aktiv' if notifier.telegram_enabled else 'aus'}")
+    wa_status = notifier.wa_provider if notifier.whatsapp_enabled else "aus"
+    print(f"  WhatsApp: {wa_status}")
     print(f"  Intervall:{'einmalig' if args.once else f' {args.interval}s'}\n")
 
     if args.once:

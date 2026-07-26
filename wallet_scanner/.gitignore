@@ -3,3 +3,4 @@ __pycache__/
 wallet_state.json
 *.tmp
 scan.log
+.env
