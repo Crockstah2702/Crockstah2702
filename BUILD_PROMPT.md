@@ -45,14 +45,31 @@ denselben Schlüsseln, aber leeren Geheimwerten):
     CALLMEBOT_APIKEY=2115030
     WHATSAPP_TO=4915678354158
 
-    # Memecoin-Signal-Filter (Standardwerte, per .env überschreibbar)
+    # Memecoin-Signal – Basis-Sanity-Filter (Standardwerte, per .env überschreibbar)
     SIGNAL_CHAIN=solana
     SIGNAL_MIN_LIQUIDITY_USD=10000
-    SIGNAL_MIN_VOLUME_H1_USD=20000
-    SIGNAL_MIN_PRICE_CHANGE_H1=20
     SIGNAL_MAX_AGE_HOURS=48
-    SIGNAL_MIN_TXNS_H1=50
     SIGNAL_POLL_SECONDS=60
+    SIGNAL_ALERT_FIRST_RUN=false
+    # Wie viele Kandidaten pro Zyklus mit Kerzen geprüft werden (Rate-Limit-Schutz)
+    SIGNAL_MAX_TOKENS_PER_CYCLE=12
+    # Kandidatenquellen: new,trending (kommagetrennt)
+    SIGNAL_SOURCES=new,trending
+
+    # Candle/OHLCV-Signale (GeckoTerminal, kostenlos, ohne Key)
+    # Timeframes, die geprüft werden (1m,5m,15m). Ein Signal auf EINEM reicht.
+    SIGNAL_TIMEFRAMES=1m,5m,15m
+    # Volumen-Spike: Volumen der letzten Kerze >= Faktor * Ø der vorherigen N Kerzen
+    SIGNAL_VOLUME_SPIKE_FACTOR=3.0
+    SIGNAL_VOLUME_SPIKE_LOOKBACK=10
+    # Grüne-Kerzen-Serie: mind. so viele grüne Kerzen in Folge am Ende
+    SIGNAL_GREEN_STREAK=3
+    # Ausbruch: letzter Close > höchstes High der vorherigen N Kerzen
+    SIGNAL_BREAKOUT_LOOKBACK=10
+    # So viele der letzten Kerzen mit in die WhatsApp-Nachricht schreiben
+    SIGNAL_CANDLES_IN_ALERT=5
+    # Pause zwischen GeckoTerminal-Calls in ms (Rate-Limit ~30/min)
+    SIGNAL_GECKO_DELAY_MS=300
 
     # Wallet-Scan
     WALLET_POLL_SECONDS=30
@@ -69,9 +86,11 @@ denselben Schlüsseln, aber leeren Geheimwerten):
       config.py          # lädt .env + Umgebungsvariablen in ein Config-Objekt
       solana_rpc.py      # Solana JSON-RPC Client
       prices.py          # DexScreener Preis-/Metadaten-Provider (Cache)
+      geckoterminal.py   # GeckoTerminal-Client: new/trending Pools + OHLCV-Kerzen
+      candles.py         # Candle-Analyse: Volumen-Spike, grüne Serie, Breakout
       notifier.py        # Konsole + WhatsApp (CallMeBot/Twilio/Meta) + Telegram
       wallet_scanner.py  # Wallet-Überwachung + P&L
-      signals.py         # Memecoin-Signal-Scanner
+      signals.py         # Memecoin-Signal-Scanner (nutzt geckoterminal + candles)
       requirements.txt
       .env               # echte Werte (gitignored)
       .env.example
@@ -113,6 +132,74 @@ denselben Schlüsseln, aber leeren Geheimwerten):
     - aus `pairs` das Paar mit **höchster** `liquidity.usd` wählen; `priceUsd`
       und Symbol (aus `baseToken`/`quoteToken` passend zum Mint) übernehmen.
     - Bei Fehler/kein Paar: Preis `0.0`, Symbol = erste 4 Zeichen des Mints.
+
+## MODUL: geckoterminal.py
+
+Client für die kostenlose GeckoTerminal-API (kein API-Key; Rate-Limit ~30
+Anfragen/Minute – daher `SIGNAL_GECKO_DELAY_MS` zwischen Calls einhalten).
+Basis-URL `https://api.geckoterminal.com/api/v2`. Header
+`Accept: application/json`.
+
+- `get_new_pools(network="solana") -> list[Pool]`:
+  GET `/networks/solana/new_pools?page=1`.
+- `get_trending_pools(network="solana") -> list[Pool]`:
+  GET `/networks/solana/trending_pools?page=1`.
+  Beide liefern `data` (Liste). Pro Eintrag ein `Pool`-Objekt bauen aus
+  `attributes` und `relationships`:
+    - `pool_address` = `attributes.address`
+    - `name` = `attributes.name` (z. B. "PEPE / SOL")
+    - `price_usd` = float(`attributes.base_token_price_usd`)
+    - `liquidity_usd` = float(`attributes.reserve_in_usd`)
+    - `volume_h1_usd` = float(`attributes.volume_usd.h1`)
+    - `price_change_h1` = float(`attributes.price_change_percentage.h1`)
+    - `created_at` = `attributes.pool_created_at` (ISO → Alter in Stunden)
+    - `base_mint` = aus `relationships.base_token.data.id`
+      (Format `"solana_<MINT>"` → Präfix `solana_` entfernen)
+    - `symbol`/`name` des Tokens soweit vorhanden; sonst aus `name` ableiten.
+  Fehlende/None-Felder tolerant auf 0.0 bzw. "" defaulten.
+- `get_ohlcv(pool_address, timeframe, aggregate, limit=50) -> list[Candle]`:
+  GET `/networks/solana/pools/<pool_address>/ohlcv/<tf>?aggregate=<agg>&limit=<n>`
+  mit Mapping der Timeframe-Kürzel:
+    - `1m`  → tf=`minute`, aggregate=`1`
+    - `5m`  → tf=`minute`, aggregate=`5`
+    - `15m` → tf=`minute`, aggregate=`15`
+    - `1h`  → tf=`hour`,   aggregate=`1`
+  Antwort: `data.attributes.ohlcv_list` = Liste von
+  `[timestamp, open, high, low, close, volume]`. GeckoTerminal liefert
+  **neueste zuerst** – im Client nach `timestamp` **aufsteigend** sortieren, so
+  dass das letzte Listenelement die aktuellste Kerze ist. Jede Kerze als
+  `Candle`-Dataclass `(ts, open, high, low, close, volume)` mit floats.
+- Alle Calls mit Timeout, Retry+Backoff; bei Fehler leere Liste zurückgeben
+  (nie werfen, damit der Scan weiterläuft).
+
+## MODUL: candles.py
+
+Reine Rechenlogik auf einer Candle-Liste (aufsteigend sortiert, letzte =
+aktuellste). Keine Netzwerkzugriffe → voll offline testbar. Alle Schwellen
+kommen aus der Config.
+
+- `volume_spike(candles, factor, lookback) -> (bool, float)`:
+  Vergleiche das Volumen der **letzten** Kerze mit dem Durchschnitt der
+  vorherigen `lookback` Kerzen. Rückgabe `(spike, ratio)` mit
+  `ratio = last_volume / avg_prev` (avg_prev>0). `spike = ratio >= factor`.
+  Der Volumen-Spike ist der **Hauptfaktor** (= erhöhter Kaufdruck/Interesse).
+- `green_streak(candles) -> int`: Anzahl der grünen Kerzen (`close > open`) am
+  Ende der Liste in Folge.
+- `breakout(candles, lookback) -> bool`: `True`, wenn der `close` der letzten
+  Kerze größer ist als das höchste `high` der davor liegenden `lookback` Kerzen.
+- `last_change_pct(candles, n) -> float`: prozentuale Änderung von `close` der
+  Kerze vor `n` Perioden bis zur letzten Kerze.
+- `format_candles(candles, count) -> str`: die letzten `count` Kerzen als
+  kompakte Textzeilen für die WhatsApp-Nachricht, z. B.
+  `HH:MM  O:0.0012 H:0.0015 L:0.0011 C:0.0014  Vol:$3.2k  ▲`
+  (grün ▲ wenn close>=open, sonst rot ▼).
+- `evaluate(candles, cfg) -> CandleSignal|None`: kombiniert die obigen Checks
+  für **einen** Timeframe. Ein Signal entsteht, wenn **Volumen-Spike** vorliegt
+  **UND** mindestens eine Bestätigung (grüne Serie `>= SIGNAL_GREEN_STREAK`
+  ODER Breakout). Rückgabe enthält: Timeframe, ratio, green_streak, breakout
+  (bool), last_change_pct und eine kurze Begründung als Text, z. B.
+  `"Vol-Spike 4.2× · 3 grüne Kerzen · Breakout (5m)"`. Kein Signal → `None`.
+  Zu wenige Kerzen (weniger als `lookback+1`) → `None`.
 
 ## MODUL: notifier.py
 
@@ -172,40 +259,50 @@ denselben Schlüsseln, aber leeren Geheimwerten):
 
 ## MODUL: signals.py
 
-Findet neue/trendende Solana-Memecoins und sendet Kauf-Signale.
+Beobachtet **alle** neuen und trendenden Solana-Memecoins, prüft sie anhand von
+**Candle-Daten** und sendet nur bei echten Signalen einen WhatsApp-Alert
+(Prinzip: „alles scannen, aber nur bei Signal melden" – kein Spam).
 
-- Quellen (öffentliche DexScreener-Endpunkte, kein Key):
-    - `https://api.dexscreener.com/token-boosts/latest/v1`
-    - `https://api.dexscreener.com/token-profiles/latest/v1`
-  Beide liefern Token mit `chainId` und `tokenAddress`. Nur Einträge mit
-  `chainId == SIGNAL_CHAIN` ("solana") verwenden.
-- Für jede Kandidaten-`tokenAddress` die Paardaten laden:
-  `https://api.dexscreener.com/latest/dex/tokens/<address>` und das Paar mit
-  höchster Liquidität nehmen. Daraus lesen: `priceUsd`, `liquidity.usd`,
-  `volume.h1`, `priceChange.h1`, `txns.h1` (buys+sells), `pairCreatedAt`
-  (Alter in Stunden), `baseToken.symbol`, `baseToken.name`, `url`.
-- **Signal-Kriterien** (alle müssen erfüllt sein; Werte aus Config):
-    - `liquidity.usd >= SIGNAL_MIN_LIQUIDITY_USD`
-    - `volume.h1 >= SIGNAL_MIN_VOLUME_H1_USD`
-    - `priceChange.h1 >= SIGNAL_MIN_PRICE_CHANGE_H1`
-    - Alter des Paares `<= SIGNAL_MAX_AGE_HOURS`
-    - `txns.h1 (buys+sells) >= SIGNAL_MIN_TXNS_H1`
-- **Deduplizierung**: bereits gemeldete Mints in `signals_state.json` speichern;
-  denselben Token nicht erneut melden (optional erneut, wenn er nach
-  Abklingzeit die Kriterien wieder frisch erfüllt — Standard: nur einmal).
-- Bei einem Treffer WhatsApp-Alert mit: Symbol, Name, Preis, Liquidität,
-  1h-Volumen, 1h-Änderung in %, Alter, Contract-Adresse und DexScreener-Link.
-  Format-Beispiel (Klartext):
-      🚀 MEMECOIN-SIGNAL: <SYMBOL> (<NAME>)
-      Preis: $<preis>   1h: +<x>%
-      Liquidität: $<liq>   Vol 1h: $<vol>   Alter: <h>h
-      CA: <mint>
-      <dexscreener-url>
-- **Erster Lauf**: aktuelle Treffer als bekannt markieren, aber der Nutzer soll
-  per Flag `--alert-on-first-run` erzwingen können, dass auch beim ersten Lauf
-  gesendet wird (Default: still erfassen). Für Signale ist es meist erwünscht,
-  auch beim ersten Lauf zu melden — mach das per Config `SIGNAL_ALERT_FIRST_RUN`
-  (Default `true`) einstellbar.
+Ablauf eines Durchlaufs (`scan_once`), nutzt `GeckoTerminal` + `candles`:
+
+1. **Kandidaten sammeln (alles erkennen):** Je nach `SIGNAL_SOURCES` die Pools
+   aus `get_new_pools()` und/oder `get_trending_pools()` laden und zu einer
+   Kandidatenliste zusammenführen (nach `pool_address` deduplizieren).
+2. **Basis-Sanity-Filter** direkt aus den Pool-Daten (ohne Zusatz-Call), um die
+   Menge sinnvoll zu begrenzen:
+    - `liquidity_usd >= SIGNAL_MIN_LIQUIDITY_USD`
+    - Alter `<= SIGNAL_MAX_AGE_HOURS`
+   (Rugs/Staub mit Mini-Liquidität fallen so raus.)
+3. Übrige Kandidaten nach `volume_h1_usd` absteigend sortieren und auf
+   `SIGNAL_MAX_TOKENS_PER_CYCLE` kürzen (schützt das GeckoTerminal-Rate-Limit).
+4. **Candle-Prüfung:** Für jeden verbleibenden Kandidaten über die in
+   `SIGNAL_TIMEFRAMES` gelisteten Timeframes (`1m,5m,15m`) je `get_ohlcv(...)`
+   holen (zwischen Calls `SIGNAL_GECKO_DELAY_MS` warten) und mit
+   `candles.evaluate(...)` bewerten. Ein **Signal** entsteht, sobald **ein**
+   Timeframe anschlägt (Volumen-Spike + Bestätigung, siehe candles.py).
+5. **Deduplizierung** über `signals_state.json`: pro Mint Zeitpunkt des letzten
+   Alerts speichern; denselben Token frühestens nach `SIGNAL_MAX_AGE_HOURS`
+   (bzw. einem festen Cooldown, Standard 6 h) erneut melden.
+6. **Alert** bei Treffer (Klartext-Format):
+       🚀 MEMECOIN-SIGNAL: <SYMBOL>
+       Grund: <candle-begründung, z. B. Vol-Spike 4.2× · 3 grüne Kerzen (5m)>
+       Preis: $<preis>   1h: <±x>%
+       Liquidität: $<liq>   Vol 1h: $<vol>   Alter: <h>h
+       Kerzen (<tf>):
+       <die letzten SIGNAL_CANDLES_IN_ALERT Kerzen via candles.format_candles>
+       CA: <mint>
+       Chart: https://www.geckoterminal.com/solana/pools/<pool_address>
+   Zusätzlich ein DexScreener-Link
+   `https://dexscreener.com/solana/<mint>`.
+7. State speichern; Konsolen-Zusammenfassung ausgeben (geprüfte Kandidaten,
+   gefundene Signale).
+
+- **Erster Lauf:** Standard `SIGNAL_ALERT_FIRST_RUN=false` → bereits laufende
+  Pumps beim Start nicht nachträglich melden, nur ab jetzt neue Signale.
+  Per `.env` auf `true` setzbar bzw. per CLI-Flag `--alert-on-first-run`
+  erzwingbar.
+- Der Volumen-Spike ist der zentrale „Warum-gekauft-wird"-Faktor; grüne Serie
+  und Breakout dienen als Bestätigung, dass die Bewegung nach oben trägt.
 
 ## MODUL/CLI: bot.py
 
@@ -233,8 +330,11 @@ Sauberes Beenden bei Ctrl+C.
 ## FEHLERBEHANDLUNG & NETZWERK
 
 - Alle HTTP-Calls mit Timeout (15–20 s).
-- RPC- und DexScreener-Aufrufe mit bis zu 4 Wiederholungen und Backoff
-  (2 s, 4 s, 8 s, 16 s) bei `requests`-Ausnahmen.
+- RPC-, DexScreener- und GeckoTerminal-Aufrufe mit bis zu 4 Wiederholungen und
+  Backoff (2 s, 4 s, 8 s, 16 s) bei `requests`-Ausnahmen.
+- GeckoTerminal-Rate-Limit (~30/min) beachten: `SIGNAL_GECKO_DELAY_MS` zwischen
+  Kerzen-Calls, Kandidaten pro Zyklus auf `SIGNAL_MAX_TOKENS_PER_CYCLE` begrenzen.
+  Bei HTTP 429 zusätzlich kurz warten und den betroffenen Kandidaten überspringen.
 - In der Dauerschleife jeden Durchlauf in try/except kapseln, Fehler loggen,
   weiterlaufen. Der Bot darf nie wegen eines einzelnen Fehlversuchs sterben.
 - Öffentlicher Solana-RPC ist stark rate-limitiert: im README auf einen eigenen
@@ -248,9 +348,17 @@ prüfen (kein echter Netzzugriff):
 - Wallet-P&L: Kauf 1000@$0.01, Zukauf 1000@$0.02 → Ø-Einstand $0.015; danach
   Verkauf 1500@$0.03 → realisierter P&L = 22.5, Restbestand 500, unrealisiert
   bei $0.03 = 7.5. Per assert prüfen.
-- Signal-Filter: ein Token, der alle Schwellen knapp erfüllt, löst ein Signal
-  aus; einer, der bei einem Kriterium darunter liegt, nicht. Dedup: derselbe
-  Token wird nicht doppelt gemeldet.
+- Candle-Logik (candles.py, mit handgebauten Kerzenlisten):
+    - `volume_spike`: letzte Kerze mit z. B. 5× Volumen der vorherigen erkennt
+      Spike (ratio korrekt); flaches Volumen erkennt keinen.
+    - `green_streak`: zählt die grünen Kerzen am Ende korrekt; eine rote am Ende
+      ergibt 0.
+    - `breakout`: neuer Höchst-Close über vorheriges Hoch = True; darunter False.
+    - `evaluate`: Volumen-Spike + 3 grüne Kerzen → Signal; Spike allein ohne
+      Bestätigung → kein Signal; kein Spike → kein Signal; zu wenige Kerzen →
+      None (kein Crash).
+- Signal-Dedup: derselbe Mint wird innerhalb des Cooldowns nicht doppelt
+  gemeldet; Basis-Sanity-Filter (Liquidität/Alter) verwirft Kandidaten korrekt.
 - Notifier-Anbieter-Erkennung: nur CallMeBot-Vars gesetzt → Anbieter
   "callmebot"; erzwungener Anbieter ohne Vars → deaktiviert (kein Crash).
 
@@ -261,9 +369,12 @@ Tests müssen ohne Internet grün sein.
 Vollständige Anleitung auf Deutsch: Installation (`pip install -r
 requirements.txt`), `.env`-Setup, CallMeBot-Aktivierung (Nummer speichern,
 "I allow callmebot to send me messages" senden, API-Key eintragen), alle
-Subcommands mit Beispielen, Erklärung der Signal-Kriterien und der
-P&L-Berechnung inkl. Näherungs-Hinweis, Twilio/Meta als Alternativen,
-Cron-Beispiel für `--once`, Hinweis auf eigenen RPC-Endpunkt.
+Subcommands mit Beispielen, Erklärung der Candle-Signale (Volumen-Spike als
+Hauptfaktor, grüne Serie + Breakout als Bestätigung) und aller Signal-Parameter,
+der P&L-Berechnung inkl. Näherungs-Hinweis, Twilio/Meta als Alternativen,
+Cron-Beispiel für `--once`, Hinweis auf eigenen RPC-Endpunkt und auf das
+GeckoTerminal-Rate-Limit. Deutlicher Disclaimer: Signale sind Heuristik auf
+Marktdaten, keine Finanzberatung/Kaufempfehlung – DYOR.
 
 ## ABNAHMEKRITERIEN
 
@@ -272,8 +383,9 @@ Cron-Beispiel für `--once`, Hinweis auf eigenen RPC-Endpunkt.
 - `python bot.py wallet` erfasst beim ersten Lauf still den Bestand und meldet
   danach neue Käufe/Verkäufe der Wallet CWNXGmsLBjFzYf9vz8BtnhHw9pf2nex4N6LiRiw2PFb7
   inkl. P&L-Tabelle.
-- `python bot.py signals` meldet neue Solana-Memecoins, die die Kriterien
-  erfüllen, ohne Duplikate.
+- `python bot.py signals` beobachtet alle neuen/trendenden Solana-Memecoins,
+  prüft sie über 1m/5m/15m-Kerzen und meldet nur bei Volumen-Spike-Signal
+  (mit Bestätigung) – inkl. der letzten Kerzen und Chart-Link, ohne Duplikate.
 - `python bot.py both` betreibt beides dauerhaft und stabil.
 - `pytest -q` (bzw. `python -m pytest`) ist grün, ohne Internet.
 - Keine Secrets im committeten Code; `.env` ist gitignored.
